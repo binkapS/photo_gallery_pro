@@ -135,7 +135,9 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
     
     private func getThumbnail(mediaId: String, mediaType: String, result: @escaping FlutterResult) {
         guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [mediaId], options: nil).firstObject else {
-            result(FlutterError(code: "INVALID_MEDIA", message: "Media not found", details: nil))
+            result(FlutterError(code: "INVALID_MEDIA", 
+                              message: "Media not found", 
+                              details: nil))
             return
         }
         
@@ -143,12 +145,12 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
         options.deliveryMode = .highQualityFormat
         options.isSynchronous = false
         
-        let targetSize = CGSize(width: 320, height: 320)
-        
-        PHImageManager.default().requestImage(for: asset,
-                                            targetSize: targetSize,
-                                            contentMode: .aspectFit,
-                                            options: options) { image, info in
+        PHImageManager.default().requestImage(
+            for: asset,
+            targetSize: CGSize(width: 320, height: 320),
+            contentMode: .aspectFill,
+            options: options
+        ) { image, info in
             guard let image = image else {
                 result(FlutterError(code: "THUMBNAIL_ERROR",
                                   message: "Could not generate thumbnail",
@@ -156,14 +158,23 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
                 return
             }
             
-            if let data = image.jpegData(compressionQuality: 0.9) {
-                result(FlutterStandardTypedData(bytes: data))
-            } else {
-                result(FlutterError(code: "THUMBNAIL_ERROR",
-                                  message: "Could not compress thumbnail",
+            guard let data = image.jpegData(compressionQuality: 0.9) else {
+                result(FlutterError(code: "COMPRESSION_ERROR",
+                                  message: "Failed to compress image",
                                   details: nil))
+                return
             }
+            
+            result(FlutterStandardTypedData(bytes: data))
         }
+    }
+    
+    // Helper method to determine if asset is cached locally
+    private func isAssetCached(_ asset: PHAsset) -> Bool {
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let resource = resources.first else { return false }
+        
+        return resource.value(forKey: "fileSize") != nil
     }
     
     private func checkPermission(result: @escaping FlutterResult) {

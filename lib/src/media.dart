@@ -1,6 +1,7 @@
-/// Represents the type of media (image or video)
-enum MediaType { image, video }
+import 'package:meta/meta.dart';
+import 'package:photo_gallery_pro/src/media_type.dart';
 
+@immutable
 abstract class Media {
   final String id;
   final String name;
@@ -21,14 +22,12 @@ abstract class Media {
   });
 
   factory Media.fromJson(Map<String, dynamic> json) {
-    // Determine media type from the presence of duration field
-    final hasVideo = json.containsKey('duration');
+    final typeStr = json['type'] as String?;
+    final type = typeStr == 'image' ? MediaType.image : MediaType.video;
 
-    if (hasVideo) {
-      return VideoMedia.fromJson(json);
-    } else {
-      return ImageMedia.fromJson(json);
-    }
+    return type == MediaType.video
+        ? VideoMedia.fromJson(json)
+        : ImageMedia.fromJson(json);
   }
 }
 
@@ -45,15 +44,14 @@ class ImageMedia extends Media {
 
   factory ImageMedia.fromJson(Map<String, dynamic> json) {
     return ImageMedia(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
       dateAdded: DateTime.fromMillisecondsSinceEpoch(
-        (json['dateAdded'] as int) *
-            1000, // Convert from seconds to milliseconds
+        (json['dateAdded'] as int? ?? 0) * 1000,
       ),
-      size: json['size'] as int,
-      width: json['width'] as int,
-      height: json['height'] as int,
+      size: json['size'] as int? ?? 0,
+      width: json['width'] as int? ?? 0,
+      height: json['height'] as int? ?? 0,
     );
   }
 
@@ -77,16 +75,15 @@ class VideoMedia extends Media {
 
   factory VideoMedia.fromJson(Map<String, dynamic> json) {
     return VideoMedia(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
       dateAdded: DateTime.fromMillisecondsSinceEpoch(
-        (json['dateAdded'] as int) *
-            1000, // Convert from seconds to milliseconds
+        (json['dateAdded'] as int? ?? 0) * 1000,
       ),
-      size: json['size'] as int,
-      width: json['width'] as int,
-      height: json['height'] as int,
-      duration: Duration(milliseconds: json['duration'] as int),
+      size: json['size'] as int? ?? 0,
+      width: json['width'] as int? ?? 0,
+      height: json['height'] as int? ?? 0,
+      duration: Duration(milliseconds: json['duration'] as int? ?? 0),
     );
   }
 

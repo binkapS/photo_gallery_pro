@@ -4,10 +4,12 @@ import 'src/album.dart';
 import 'src/media.dart';
 import 'src/thumbnail.dart';
 import 'photo_gallery_pro_platform_interface.dart';
+import 'package:photo_gallery_pro/src/media_type.dart';
 
 export 'src/album.dart';
 export 'src/media.dart';
 export 'src/thumbnail.dart';
+export 'src/media_type.dart';
 
 class PhotoGalleryPro {
   static const MethodChannel _channel = MethodChannel('photo_gallery_pro');
@@ -56,12 +58,19 @@ class PhotoGalleryPro {
     String mediaId, {
     MediaType type = MediaType.image,
   }) async {
-    final Map<dynamic, dynamic> thumbnailData = await _channel.invokeMethod(
-      'getThumbnail',
-      {'mediaId': mediaId, 'mediaType': type.toString().split('.').last},
-    );
+    try {
+      final dynamic thumbnailData = await _channel.invokeMethod(
+        'getThumbnail',
+        {'mediaId': mediaId, 'mediaType': type.toString().split('.').last},
+      );
 
-    return Thumbnail.fromJson(Map<String, dynamic>.from(thumbnailData));
+      return Thumbnail.fromPlatformData(thumbnailData);
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error getting thumbnail: $e');
+      }
+      rethrow;
+    }
   }
 
   /// Checks if the app has required permissions

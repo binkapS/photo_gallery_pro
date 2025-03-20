@@ -1,86 +1,37 @@
+import 'package:meta/meta.dart';
+import 'media_type.dart';
+
+/// Represents a media album (photos or videos)
+@immutable
 class Album {
+  /// Unique identifier for the album
   final String id;
+
+  /// Display name of the album
   final String name;
-  final String description;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
-  final int photoCount;
-  final String? coverPhotoUrl;
+
+  /// Number of items in the album
+  final int count;
+
+  /// Type of media in the album (image or video)
+  final MediaType type;
 
   const Album({
     required this.id,
     required this.name,
-    this.description = '',
-    required this.createdAt,
-    this.updatedAt,
-    this.photoCount = 0,
-    this.coverPhotoUrl,
+    required this.count,
+    required this.type,
   });
 
-  Album copyWith({
-    String? id,
-    String? name,
-    String? description,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    int? photoCount,
-    String? coverPhotoUrl,
-  }) {
+  factory Album.fromJson(Map<String, dynamic> json) {
     return Album(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      photoCount: photoCount ?? this.photoCount,
-      coverPhotoUrl: coverPhotoUrl ?? this.coverPhotoUrl,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      count: json['count'] as int? ?? 0,
+      type: json['type'] == 'image' ? MediaType.image : MediaType.video,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'description': description,
-    'createdAt': createdAt.toIso8601String(),
-    'updatedAt': updatedAt?.toIso8601String(),
-    'photoCount': photoCount,
-    'coverPhotoUrl': coverPhotoUrl,
-  };
-
-  factory Album.fromJson(Map<String, dynamic> json) => Album(
-    id: json['id'] as String,
-    name: json['name'] as String,
-    description: json['description'] as String? ?? '',
-    createdAt: DateTime.parse(json['createdAt'] as String),
-    updatedAt:
-        json['updatedAt'] != null
-            ? DateTime.parse(json['updatedAt'] as String)
-            : null,
-    photoCount: json['photoCount'] as int? ?? 0,
-    coverPhotoUrl: json['coverPhotoUrl'] as String?,
-  );
-
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Album &&
-          runtimeType == other.runtimeType &&
-          id == other.id &&
-          name == other.name &&
-          description == other.description &&
-          createdAt == other.createdAt &&
-          updatedAt == other.updatedAt &&
-          photoCount == other.photoCount &&
-          coverPhotoUrl == other.coverPhotoUrl;
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    name,
-    description,
-    createdAt,
-    updatedAt,
-    photoCount,
-    coverPhotoUrl,
-  );
+  String toString() => 'Album(name: $name, type: $type, count: $count)';
 }

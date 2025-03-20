@@ -1,6 +1,8 @@
 package com.binkap.photo_gallery_pro
 
 import android.Manifest
+import android.app.Activity
+import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.MediaStore
@@ -9,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.graphics.Bitmap
 import android.media.ThumbnailUtils
+import android.util.Size
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -18,6 +21,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import java.io.ByteArrayOutputStream
 
 class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var channel: MethodChannel
@@ -58,67 +62,93 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     }
 
     private fun getAlbums(result: Result) {
-        val albums = mutableListOf<Map<String, Any>>()
-        
-        // Query for image albums
-        var imageProjection = arrayOf(
-            MediaStore.Images.Media.BUCKET_ID,
-            MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
-            "COUNT(*) AS count"
-        )
-        
-        val imageSelection = "1) GROUP BY (${MediaStore.Images.Media.BUCKET_ID}"
-        
-        val imageCursor = context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            imageProjection,
-            imageSelection,
-            null,
-            null
-        )
+        try {
+            val albums = mutableListOf<Map<String, Any>>()
+            
+            // Query for image albums
+            val imageProjection = arrayOf(
+                MediaStore.Images.Media.BUCKET_ID,
+                MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+            )
+            
+            val imageSelection = "${MediaStore.Images.Media.BUCKET_ID} IS NOT NULL"
+            
+            val imageCursor = context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                imageProjection,
+                imageSelection,
+                null,
+                "${MediaStore.Images.Media.BUCKET_ID} ASC"
+            )
 
-        imageCursor?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val album = mapOf(
-                    "id" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID)),
-                    "name" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)),
-                    "count" to cursor.getInt(cursor.getColumnIndexOrThrow("count")),
-                    "type" to "image"
-                )
-                albums.add(album)
+            val imageAlbums = mutableMapOf<String, MutableMap<String, Any>>()
+            
+            imageCursor?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val bucketId = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID))
+                    if (!imageAlbums.containsKey(bucketId)) {
+                        imageAlbums[bucketId] = mutableMapOf(
+                            "id" to bucketId,
+                            "name" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)),
+                            "count" to 1,
+                            "type" to "image"
+                        )
+                    } else {
+                        imageAlbums[bucketId]?.let { album ->
+                            album["count"] = (album["count"] as Int) + 1
+                        }
+                    }
+                }
             }
-        }
+            
+            albums.addAll(imageAlbums.values)
 
-        // Query for video albums
-        var videoProjection = arrayOf(
-            MediaStore.Video.Media.BUCKET_ID,
-            MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
-            "COUNT(*) AS count"
-        )
-        
-        val videoSelection = "1) GROUP BY (${MediaStore.Video.Media.BUCKET_ID}"
-        
-        val videoCursor = context.contentResolver.query(
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-            videoProjection,
-            videoSelection,
-            null,
-            null
-        )
+            // Query for video albums
+            val videoProjection = arrayOf(
+                MediaStore.Video.Media.BUCKET_ID,
+                MediaStore.Video.Media.BUCKET_DISPLAY_NAME
+            )
+            
+            val videoSelection = "${MediaStore.Video.Media.BUCKET_ID} IS NOT NULL"
+            
+            val videoCursor = context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                videoProjection,
+                videoSelection,
+                null,
+                "${MediaStore.Video.Media.BUCKET_ID} ASC"
+            )
 
-        videoCursor?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val album = mapOf(
-                    "id" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_ID)),
-                    "name" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)),
-                    "count" to cursor.getInt(cursor.getColumnIndexOrThrow("count")),
-                    "type" to "video"
-                )
-                albums.add(album)
+            val videoAlbums = mutableMapOf<String, MutableMap<String, Any>>()
+            
+            videoCursor?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val bucketId = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_ID))
+                    if (!videoAlbums.containsKey(bucketId)) {
+                        videoAlbums[bucketId] = mutableMapOf(
+                            "id" to bucketId,
+                            "name" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)),
+                            "count" to 1,
+                            "type" to "video"
+                        )
+                    } else {
+                        videoAlbums[bucketId]?.let { album ->
+                            album["count"] = (album["count"] as Int) + 1
+                        }
+                    }
+                }
             }
-        }
+            
+            albums.addAll(videoAlbums.values)
 
-        result.success(albums)
+            result.success(albums)
+        } catch (e: Exception) {
+            result.error(
+                "FETCH_ERROR",
+                "Failed to fetch albums: ${e.message}",
+                e.stackTraceToString()
+            )
+        }
     }
 
     private fun getMediaInAlbum(albumId: String, mediaType: String, result: Result) {
@@ -199,18 +229,74 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
     private fun getThumbnail(mediaId: String, mediaType: String, result: Result) {
         try {
-            val uri = when (mediaType) {
-                "image" -> ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId.toLong())
-                "video" -> ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId.toLong())
+            val uri: Uri = when (mediaType) {
+                "image" -> {
+                    // Use the Images table and its proper _ID column.
+                    val selection = "${MediaStore.Images.Media._ID} = ?"
+                    val cursor = context.contentResolver.query(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        arrayOf(MediaStore.Images.Media._ID),
+                        selection,
+                        arrayOf(mediaId),
+                        null
+                    )
+                    if (cursor?.moveToFirst() != true) {
+                        cursor?.close()
+                        result.error("THUMBNAIL_ERROR", "Image media not found: $mediaId", null)
+                        return
+                    }
+                    cursor.close()
+                    ContentUris.withAppendedId(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        mediaId.toLong()
+                    )
+                }
+                "video" -> {
+                    // Video retrieval as before.
+                    val videoUri = ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        mediaId.toLong()
+                    )
+                    val cursor = context.contentResolver.query(
+                        videoUri,
+                        arrayOf(MediaStore.Video.Media._ID),
+                        null,
+                        null,
+                        null
+                    )
+                    if (cursor?.moveToFirst() != true) {
+                        cursor?.close()
+                        result.error("THUMBNAIL_ERROR", "Video media not found: $mediaId", null)
+                        return
+                    }
+                    cursor.close()
+                    videoUri
+                }
                 else -> {
-                    result.error("INVALID_TYPE", "Invalid media type", null)
+                    result.error("INVALID_TYPE", "Invalid media type: $mediaType", null)
                     return
                 }
             }
-
-            val thumbnail = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                context.contentResolver.loadThumbnail(uri, Size(320, 320), null)
-            } else {
+            
+            val thumbnail: Bitmap? = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.contentResolver.loadThumbnail(uri, Size(320, 320), null)
+                } else {
+                    when (mediaType) {
+                        "image" -> MediaStore.Images.Thumbnails.getThumbnail(
+                            context.contentResolver,
+                            mediaId.toLong(),
+                            MediaStore.Images.Thumbnails.MINI_KIND,
+                            null
+                        )
+                        "video" -> ThumbnailUtils.createVideoThumbnail(
+                            uri.toString(),
+                            MediaStore.Video.Thumbnails.MINI_KIND
+                        )
+                        else -> null
+                    }
+                }
+            } catch (e: Exception) {
                 when (mediaType) {
                     "image" -> MediaStore.Images.Thumbnails.getThumbnail(
                         context.contentResolver,
@@ -225,16 +311,16 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                     else -> null
                 }
             }
-
+            
             if (thumbnail != null) {
                 val stream = ByteArrayOutputStream()
                 thumbnail.compress(Bitmap.CompressFormat.JPEG, 90, stream)
                 result.success(stream.toByteArray())
             } else {
-                result.error("THUMBNAIL_ERROR", "Could not generate thumbnail", null)
+                result.error("THUMBNAIL_ERROR", "Could not generate thumbnail for $mediaId", null)
             }
         } catch (e: Exception) {
-            result.error("THUMBNAIL_ERROR", e.message, null)
+            result.error("THUMBNAIL_ERROR", "Error generating thumbnail: ${e.message}", e.stackTraceToString())
         }
     }
 
