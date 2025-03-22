@@ -443,6 +443,30 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
         result.success(true)
     }
 
+    private fun getAlbumCount(bucketId: String, isVideo: Boolean): Int {
+        val uri = if (isVideo) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val selection = if (isVideo) {
+            "${MediaStore.Video.Media.BUCKET_ID} = ?"
+        } else {
+            "${MediaStore.Images.Media.BUCKET_ID} = ?"
+        }
+
+        return context.contentResolver.query(
+            uri,
+            null,  // Using null instead of trying to use COUNT
+            selection,
+            arrayOf(bucketId),
+            null
+        )?.use { cursor ->
+            cursor.count  // Using cursor.count instead of trying to get COUNT column
+        } ?: 0
+    }
+
     // Add ActivityAware implementation
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
