@@ -162,10 +162,68 @@ class _HomePageState extends State<HomePage> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (album.type == MediaType.image)
-                  const Icon(Icons.photo_library, size: 64)
-                else
-                  const Icon(Icons.video_library, size: 64),
+                FutureBuilder<Thumbnail>(
+                  future: _photoGallery.getAlbumThumbnail(
+                    album.id,
+                    type: album.type,
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      debugPrint(
+                        'Failed to load album thumbnail: ${snapshot.error}',
+                      );
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              album.type == MediaType.image
+                                  ? Icons.photo_library
+                                  : Icons.video_library,
+                              size: 48,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Error loading thumbnail',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (!snapshot.hasData) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Icon(
+                            album.type == MediaType.image
+                                ? Icons.photo_library
+                                : Icons.video_library,
+                            size: 48,
+                            color: Colors.grey.withAlpha((.5 * 255).toInt()),
+                          ),
+                          const Center(child: CircularProgressIndicator()),
+                        ],
+                      );
+                    }
+
+                    return Hero(
+                      tag: 'album_${album.id}',
+                      child: Image.memory(
+                        snapshot.data!.data,
+                        fit: BoxFit.cover,
+                        cacheWidth: 320,
+                        cacheHeight: 320,
+                      ),
+                    );
+                  },
+                ),
                 Positioned(
                   left: 0,
                   right: 0,
@@ -176,7 +234,7 @@ class _HomePageState extends State<HomePage> {
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [
-                          Colors.black.withAlpha((.7 * 255).toInt()),
+                          Colors.black.withAlpha((.5 * 255).toInt()),
                           Colors.transparent,
                         ],
                       ),
@@ -224,6 +282,7 @@ class _HomePageState extends State<HomePage> {
           future: _photoGallery.getThumbnail(media.id, type: media.type),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
+              // debugPrint(media.type.toString());
               debugPrint('Failed to load thumbnail: ${snapshot.error}');
               return const Center(child: Icon(Icons.error));
             }

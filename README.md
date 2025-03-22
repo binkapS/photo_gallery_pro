@@ -4,19 +4,20 @@ A Flutter plugin for accessing and managing photos and videos from the device ga
 
 ## Features
 
-- Browse photo and video albums
-- Access media files within albums
-- Generate thumbnails for images and videos
-- Handle runtime permissions
-- Support for Android 13+ and iOS photo library permissions
+* List all media albums (photos and videos)
+* Get media items from specific albums
+* Generate thumbnails for media items
+* Get album thumbnails (cover images)
+* Permission handling for gallery access
+* Support for both images and videos
 
-## Installation
+## Getting Started
 
 Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  photo_gallery_pro: ^1.0.0
+  photo_gallery_pro: ^0.0.2
 ```
 
 ## Platform Setup
@@ -45,122 +46,38 @@ Add the following keys to your iOS Info.plist (`ios/Runner/Info.plist`):
 
 ## Usage
 
-### Initialize the Plugin
-
 ```dart
 import 'package:photo_gallery_pro/photo_gallery_pro.dart';
 
+// Initialize the plugin
 final photoGallery = PhotoGalleryPro();
-```
 
-### Request Permissions
-
-Always check and request permissions before accessing media:
-
-```dart
-// Check if permission is granted
-bool hasPermission = await photoGallery.hasPermission();
-
-// Request permission if not granted
-if (!hasPermission) {
-  hasPermission = await photoGallery.requestPermission();
+// Request permissions if needed
+if (!await photoGallery.hasPermission()) {
+  final granted = await photoGallery.requestPermission();
+  if (!granted) return;
 }
-```
 
-### Get All Albums
+// Get all albums
+final albums = await photoGallery.getAlbums();
 
-```dart
-List<Album> albums = await photoGallery.getAlbums();
-
-// Access album properties
-for (var album in albums) {
-  print('Album ID: ${album.id}');
-  print('Album Name: ${album.name}');
-  print('Media Count: ${album.count}');
-  print('Media Type: ${album.type}'); // image or video
-}
-```
-
-### Get Media Files from an Album
-
-```dart
-// Get all images from an album
-List<Media> images = await photoGallery.getMediaInAlbum(
-  albumId,
-  type: MediaType.image,
+// Get album thumbnail
+final albumThumbnail = await photoGallery.getAlbumThumbnail(
+  albums[0].id,
+  type: albums[0].type,
 );
 
-// Get all videos from an album
-List<Media> videos = await photoGallery.getMediaInAlbum(
-  albumId,
-  type: MediaType.video,
+// Get media in an album
+final mediaList = await photoGallery.getMediaInAlbum(
+  albums[0].id,
+  type: albums[0].type,
 );
 
-// Access media properties
-for (var media in images) {
-  print('Media ID: ${media.id}');
-  print('File Name: ${media.name}');
-  print('Date Added: ${media.dateAdded}');
-  print('Width: ${media.width}');
-  print('Height: ${media.height}');
-  
-  // For videos only
-  if (media is VideoMedia) {
-    print('Duration: ${media.duration}');
-  }
-}
-```
-
-### Generate Thumbnails
-
-```dart
-// Get thumbnail for an image
-Thumbnail imageThumbnail = await photoGallery.getThumbnail(
-  mediaId,
-  type: MediaType.image,
+// Get thumbnail for a specific media item
+final thumbnail = await photoGallery.getThumbnail(
+  mediaList[0].id,
+  type: mediaList[0].type,
 );
-
-// Get thumbnail for a video
-Thumbnail videoThumbnail = await photoGallery.getThumbnail(
-  mediaId,
-  type: MediaType.video,
-);
-```
-
-## Example
-
-```dart
-void main() async {
-  final photoGallery = PhotoGalleryPro();
-  
-  // Request permissions
-  if (!await photoGallery.hasPermission()) {
-    bool granted = await photoGallery.requestPermission();
-    if (!granted) {
-      print('Permission denied');
-      return;
-    }
-  }
-  
-  // Get all albums
-  List<Album> albums = await photoGallery.getAlbums();
-  
-  // Get media from first album
-  if (albums.isNotEmpty) {
-    List<Media> mediaFiles = await photoGallery.getMediaInAlbum(
-      albums.first.id,
-      type: MediaType.image,
-    );
-    
-    // Get thumbnail for first media item
-    if (mediaFiles.isNotEmpty) {
-      Thumbnail thumbnail = await photoGallery.getThumbnail(
-        mediaFiles.first.id,
-        type: MediaType.image,
-      );
-    }
-  }
-}
 ```
 
 ## License

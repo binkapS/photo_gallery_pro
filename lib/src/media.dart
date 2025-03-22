@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:meta/meta.dart';
 import 'package:photo_gallery_pro/src/media_type.dart';
 
@@ -22,12 +23,13 @@ abstract class Media {
   });
 
   factory Media.fromJson(Map<String, dynamic> json) {
-    final typeStr = json['type'] as String?;
-    final type = typeStr == 'image' ? MediaType.image : MediaType.video;
+    final type = json['type'] == 'image' ? MediaType.image : MediaType.video;
 
-    return type == MediaType.video
-        ? VideoMedia.fromJson(json)
-        : ImageMedia.fromJson(json);
+    if (type == MediaType.image) {
+      return ImageMedia.fromJson(json);
+    } else {
+      return VideoMedia.fromJson(json);
+    }
   }
 }
 

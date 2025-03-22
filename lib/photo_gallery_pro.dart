@@ -73,6 +73,18 @@ class PhotoGalleryPro {
     }
   }
 
+  /// Fetches the album thumbnail for the given album ID.
+  Future<Thumbnail> getAlbumThumbnail(
+    String albumId, {
+    MediaType type = MediaType.image,
+  }) async {
+    final dynamic thumbnailData = await _channel.invokeMethod(
+      'getAlbumThumbnail',
+      {'albumId': albumId, 'mediaType': type.toString().split('.').last},
+    );
+    return Thumbnail.fromPlatformData(thumbnailData);
+  }
+
   /// Checks if the app has required permissions
   Future<bool> hasPermission() async {
     return await _channel.invokeMethod('hasPermission') ?? false;
