@@ -13,7 +13,7 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "getAlbums":
-            getAlbums(result: result)
+            getAlbums(call, result: result)
         case "getMediaInAlbum":
             guard let args = call.arguments as? [String: Any],
                   let albumId = args["albumId"] as? String,
@@ -55,56 +55,59 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
         }
     }
     
-    private func getAlbums(result: @escaping FlutterResult) {
-        PHPhotoLibrary.requestAuthorization { status in
-            if status == .authorized {
-                var albums: [[String: Any]] = []
-                
-                // Fetch image albums
-                let imageOptions = PHFetchOptions()
-                imageOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
-                
-                let imageAlbums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
-                imageAlbums.enumerateObjects { (collection, _, _) in
-                    let assets = PHAsset.fetchAssets(in: collection, options: imageOptions)
-                    if assets.count > 0 {
-                        albums.append([
-                            "id": collection.localIdentifier,
-                            "name": collection.localizedTitle ?? "",
-                            "count": assets.count,
-                            "type": "image"
-                        ])
-                    }
-                }
-                
-                // Fetch video albums
-                let videoOptions = PHFetchOptions()
-                videoOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
-                
-                let videoAlbums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
-                videoAlbums.enumerateObjects { (collection, _, _) in
-                    let assets = PHAsset.fetchAssets(in: collection, options: videoOptions)
-                    if assets.count > 0 {
-                        albums.append([
-                            "id": collection.localIdentifier,
-                            "name": collection.localizedTitle ?? "",
-                            "count": assets.count,
-                            "type": "video"
-                        ])
-                    }
-                }
-                
-                DispatchQueue.main.async {
-                    result(albums)
-                }
-            } else {
-                DispatchQueue.main.async {
-                    result(FlutterError(code: "PERMISSION_DENIED",
-                                      message: "Photo library access denied",
-                                      details: nil))
+    private func getAlbums(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let mediaType = (call.arguments as? [String: Any])?["mediaType"] as? String
+        
+        let fetchOptions = PHFetchOptions()
+        
+        // Set media type filter if specified
+        if let mediaType = mediaType {
+            switch mediaType {
+            case "image":
+                fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+            case "video":
+                fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+            default:
+                result(FlutterError(code: "INVALID_TYPE", message: "Invalid media type: \(mediaType)", details: nil))
+                return
+            }
+        }
+        
+        // Fetch user albums
+        let userAlbums = PHAssetCollection.fetchAssetCollections(
+            with: .album,
+            subtype: .any,
+            options: nil
+        )
+        
+        // Fetch smart albums (Camera Roll, Videos, etc)
+        let smartAlbums = PHAssetCollection.fetchAssetCollections(
+            with: .smartAlbum,
+            subtype: .any,
+            options: nil
+        )
+        
+        var albums: [[String: Any]] = []
+        
+        // Process albums
+        for collection in [userAlbums, smartAlbums] {
+            collection.enumerateObjects { (album, _, _) in
+                let assets = PHAsset.fetchAssets(in: album, options: fetchOptions)
+                if assets.count > 0 {
+                    // Determine album type based on first asset
+                    let albumType = assets.firstObject?.mediaType == .video ? "video" : "image"
+                    
+                    albums.append([
+                        "id": album.localIdentifier,
+                        "name": album.localizedTitle ?? "Unknown",
+                        "count": assets.count,
+                        "type": albumType
+                    ])
                 }
             }
         }
+        
+        result.success(albums)
     }
     
     private func getMediaInAlbum(albumId: String, mediaType: String, result: @escaping FlutterResult) {

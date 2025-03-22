@@ -19,22 +19,16 @@ class PhotoGalleryPro {
   }
 
   /// Fetches all albums from the device
-  Future<List<Album>> getAlbums() async {
-    try {
-      final List<dynamic> albums = await _channel.invokeMethod('getAlbums');
-      if (kDebugMode) {
-        print('Fetched ${albums.length} albums');
-      }
-      return albums
-          .cast<Map<dynamic, dynamic>>()
-          .map((map) => Album.fromJson(Map<String, dynamic>.from(map)))
-          .toList();
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching albums: $e');
-      }
-      rethrow;
-    }
+  Future<List<Album>> getAlbums({MediaType? type}) async {
+    final List<dynamic> albums = await _channel.invokeMethod(
+      'getAlbums',
+      type != null ? {'mediaType': type.toString().split('.').last} : null,
+    );
+
+    return albums
+        .cast<Map<dynamic, dynamic>>()
+        .map((map) => Album.fromJson(Map<String, dynamic>.from(map)))
+        .toList();
   }
 
   /// Fetches media files from a specific album

@@ -36,7 +36,10 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
-            "getAlbums" -> getAlbums(result)
+            "getAlbums" -> {
+                val mediaType = call.argument<String?>("mediaType")
+                getAlbums(mediaType, result)
+            }
             "getMediaInAlbum" -> {
                 val albumId = call.argument<String>("albumId")
                 val mediaType = call.argument<String>("mediaType") // "image" or "video"
@@ -70,93 +73,79 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
         }
     }
 
-    private fun getAlbums(result: Result) {
+    private fun getAlbums(mediaType: String?, result: Result) {
         try {
             val albums = mutableListOf<Map<String, Any>>()
-            
-            // Query for image albums
-            val imageProjection = arrayOf(
-                MediaStore.Images.Media.BUCKET_ID,
-                MediaStore.Images.Media.BUCKET_DISPLAY_NAME
-            )
-            
-            val imageSelection = "${MediaStore.Images.Media.BUCKET_ID} IS NOT NULL"
-            
-            val imageCursor = context.contentResolver.query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                imageProjection,
-                imageSelection,
-                null,
-                "${MediaStore.Images.Media.BUCKET_ID} ASC"
-            )
+            val processedBucketIds = mutableSetOf<String>()
 
-            val imageAlbums = mutableMapOf<String, MutableMap<String, Any>>()
-            
-            imageCursor?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val bucketId = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID))
-                    if (!imageAlbums.containsKey(bucketId)) {
-                        imageAlbums[bucketId] = mutableMapOf(
-                            "id" to bucketId,
-                            "name" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)),
-                            "count" to 1,
-                            "type" to "image"
-                        )
-                    } else {
-                        imageAlbums[bucketId]?.let { album ->
-                            album["count"] = (album["count"] as Int) + 1
+            // Define media URIs based on requested type
+            val urisToQuery = when (mediaType) {
+                "image" -> listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                "video" -> listOf(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                null -> listOf(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                )
+                else -> {
+                    result.error("INVALID_TYPE", "Invalid media type: $mediaType", null)
+                    return
+                }
+            }
+
+            for (uri in urisToQuery) {
+                val isVideo = uri == MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                val (projection, bucketIdColumn, bucketNameColumn) = if (isVideo) {
+                    Triple(
+                        arrayOf(
+                            MediaStore.Video.Media.BUCKET_ID,
+                            MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
+                            MediaStore.Video.Media._ID
+                        ),
+                        MediaStore.Video.Media.BUCKET_ID,
+                        MediaStore.Video.Media.BUCKET_DISPLAY_NAME
+                    )
+                } else {
+                    Triple(
+                        arrayOf(
+                            MediaStore.Images.Media.BUCKET_ID,
+                            MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+                            MediaStore.Images.Media._ID
+                        ),
+                        MediaStore.Images.Media.BUCKET_ID,
+                        MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+                    )
+                }
+
+                context.contentResolver.query(
+                    uri,
+                    projection,
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val bucketId = cursor.getString(cursor.getColumnIndexOrThrow(bucketIdColumn))
+                        
+                        if (bucketId !in processedBucketIds) {
+                            processedBucketIds.add(bucketId)
+                            
+                            val name = cursor.getString(cursor.getColumnIndexOrThrow(bucketNameColumn)) ?: "Unknown"
+                            val count = getAlbumCount(bucketId, isVideo)
+                            
+                            albums.add(mapOf(
+                                "id" to bucketId,
+                                "name" to name,
+                                "count" to count,
+                                "type" to if (isVideo) "video" else "image"
+                            ))
                         }
                     }
                 }
             }
-            
-            albums.addAll(imageAlbums.values)
-
-            // Query for video albums
-            val videoProjection = arrayOf(
-                MediaStore.Video.Media.BUCKET_ID,
-                MediaStore.Video.Media.BUCKET_DISPLAY_NAME
-            )
-            
-            val videoSelection = "${MediaStore.Video.Media.BUCKET_ID} IS NOT NULL"
-            
-            val videoCursor = context.contentResolver.query(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                videoProjection,
-                videoSelection,
-                null,
-                "${MediaStore.Video.Media.BUCKET_ID} ASC"
-            )
-
-            val videoAlbums = mutableMapOf<String, MutableMap<String, Any>>()
-            
-            videoCursor?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val bucketId = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_ID))
-                    if (!videoAlbums.containsKey(bucketId)) {
-                        videoAlbums[bucketId] = mutableMapOf(
-                            "id" to bucketId,
-                            "name" to cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)),
-                            "count" to 1,
-                            "type" to "video"
-                        )
-                    } else {
-                        videoAlbums[bucketId]?.let { album ->
-                            album["count"] = (album["count"] as Int) + 1
-                        }
-                    }
-                }
-            }
-            
-            albums.addAll(videoAlbums.values)
 
             result.success(albums)
         } catch (e: Exception) {
-            result.error(
-                "FETCH_ERROR",
-                "Failed to fetch albums: ${e.message}",
-                e.stackTraceToString()
-            )
+            result.error("ALBUMS_ERROR", "Error fetching albums: ${e.message}", e.stackTraceToString())
         }
     }
 

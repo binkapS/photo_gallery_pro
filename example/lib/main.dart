@@ -68,6 +68,25 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _loadAlbums() async {
+    final hasPermission = await _photoGallery.hasPermission();
+    if (!hasPermission) {
+      final granted = await _photoGallery.requestPermission();
+      if (!granted) return;
+    }
+
+    // Get all albums
+    _albums = await _photoGallery.getAlbums();
+
+    // Or get only image albums
+    final imageAlbums = await _photoGallery.getAlbums(type: MediaType.image);
+
+    // Or get only video albums
+    final videoAlbums = await _photoGallery.getAlbums(type: MediaType.video);
+
+    setState(() {});
+  }
+
   Future<void> _loadAlbumMedia(Album album) async {
     setState(() {
       _loading = true;

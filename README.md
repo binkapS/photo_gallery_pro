@@ -4,20 +4,24 @@ A Flutter plugin for accessing and managing photos and videos from the device ga
 
 ## Features
 
-* List all media albums (photos and videos)
-* Get media items from specific albums
-* Generate thumbnails for media items
-* Get album thumbnails (cover images)
-* Permission handling for gallery access
-* Support for both images and videos
+- 📱 List all media albums (photos and videos)
+- 🖼️ Filter albums by media type (images or videos)
+- 📂 Get media items from specific albums
+- 🎬 Support for both images and videos
+- 👍 Permission handling
+- 🔍 Generate thumbnails for:
+  - Individual media items
+  - Album covers
+- ⚡ Optimized performance
+- 🎨 Material Design 3 example app
 
-## Getting Started
+## Installation
 
 Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  photo_gallery_pro: ^0.0.2
+  photo_gallery_pro: ^0.0.4
 ```
 
 ## Platform Setup
@@ -46,6 +50,8 @@ Add the following keys to your iOS Info.plist (`ios/Runner/Info.plist`):
 
 ## Usage
 
+### Basic Setup
+
 ```dart
 import 'package:photo_gallery_pro/photo_gallery_pro.dart';
 
@@ -57,16 +63,30 @@ if (!await photoGallery.hasPermission()) {
   final granted = await photoGallery.requestPermission();
   if (!granted) return;
 }
+```
 
+### Working with Albums
+
+```dart
 // Get all albums
 final albums = await photoGallery.getAlbums();
+
+// Get only image albums
+final imageAlbums = await photoGallery.getAlbums(type: MediaType.image);
+
+// Get only video albums
+final videoAlbums = await photoGallery.getAlbums(type: MediaType.video);
 
 // Get album thumbnail
 final albumThumbnail = await photoGallery.getAlbumThumbnail(
   albums[0].id,
   type: albums[0].type,
 );
+```
 
+### Working with Media
+
+```dart
 // Get media in an album
 final mediaList = await photoGallery.getMediaInAlbum(
   albums[0].id,
@@ -80,6 +100,29 @@ final thumbnail = await photoGallery.getThumbnail(
 );
 ```
 
+## Example
+
+Check the [example](example) directory for a complete sample app demonstrating all features.
+
+## Platform Support
+
+| Android | iOS |
+|:-------:|:---:|
+|    ✅    |  ✅  |
+
+## Contributing
+
+Feel free to contribute to this project by:
+
+- [Opening issues](https://github.com/binkapS/photo_gallery_pro/issues)
+- Submitting pull requests
+- Adding documentation
+- Reporting bugs
+
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```
+MIT License
+
+Copyright (c) 2024 BinKap
+```
