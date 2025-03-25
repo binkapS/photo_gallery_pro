@@ -1,3 +1,15 @@
+## 0.0.5
+
+* Fixed Linux platform support:
+  * Fixed method channel error handling
+  * Corrected thumbnail generation using GDK-Pixbuf
+  * Fixed media type parameter handling
+  * Improved error messages for better debugging
+  * Added proper null checks for method arguments
+  * Fixed directory traversal in album listing
+  * Improved memory management for thumbnails
+  * Added proper cleanup of GObject resources
+
 ## 0.0.4
 
 * Added ability to filter albums by media type (image/video)
