@@ -121,8 +121,4 @@ Feel free to contribute to this project by:
 
 ## License
 
-```
-MIT License
-
-Copyright (c) 2024 BinKap
-```
+- [LICENSE](LICENSE)
