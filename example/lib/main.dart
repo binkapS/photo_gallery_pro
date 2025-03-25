@@ -75,14 +75,14 @@ class _HomePageState extends State<HomePage> {
   //     if (!granted) return;
   //   }
 
-  //   // Get all albums
-  //   _albums = await _photoGallery.getAlbums();
+  // // Get all albums
+  // _albums = await _photoGallery.getAlbums();
 
-  //   // Or get only image albums
-  //   // final imageAlbums = await _photoGallery.getAlbums(type: MediaType.image);
+  // // Or get only image albums
+  // // final imageAlbums = await _photoGallery.getAlbums(type: MediaType.image);
 
-  //   // Or get only video albums
-  //   // final videoAlbums = await _photoGallery.getAlbums(type: MediaType.video);
+  // // Or get only video albums
+  // // final videoAlbums = await _photoGallery.getAlbums(type: MediaType.video);
 
   //   setState(() {});
   // }
