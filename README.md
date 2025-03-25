@@ -1,6 +1,6 @@
 # Photo Gallery Pro
 
-A Flutter plugin for accessing and managing photos and videos from the device gallery. Supports both Android and iOS platforms.
+A Flutter plugin for accessing and managing photos and videos from the device gallery. Supports Android, iOS, and Linux platforms.
 
 ## Features
 
@@ -8,12 +8,18 @@ A Flutter plugin for accessing and managing photos and videos from the device ga
 - 🖼️ Filter albums by media type (images or videos)
 - 📂 Get media items from specific albums
 - 🎬 Support for both images and videos
-- 👍 Permission handling
+- 👍 Permission handling (on Android and iOS)
 - 🔍 Generate thumbnails for:
   - Individual media items
   - Album covers
 - ⚡ Optimized performance
 - 🎨 Material Design 3 example app
+
+## Platform Support
+
+| Android | iOS | Linux |
+|:-------:|:---:|:-----:|
+|    ✅    |  ✅  |   ✅   |
 
 ## Installation
 
@@ -48,6 +54,15 @@ Add the following keys to your iOS Info.plist (`ios/Runner/Info.plist`):
 <string>This app requires access to the photo library to display your photos and videos.</string>
 ```
 
+### Linux
+
+Ensure you have the necessary dependencies installed:
+
+```bash
+sudo apt-get update
+sudo apt-get install libgtk-3-dev pkg-config cmake ninja-build libgdk-pixbuf2.0-dev
+```
+
 ## Usage
 
 ### Basic Setup
@@ -58,7 +73,7 @@ import 'package:photo_gallery_pro/photo_gallery_pro.dart';
 // Initialize the plugin
 final photoGallery = PhotoGalleryPro();
 
-// Request permissions if needed
+// Request permissions if needed (not required on Linux)
 if (!await photoGallery.hasPermission()) {
   final granted = await photoGallery.requestPermission();
   if (!granted) return;
@@ -68,19 +83,13 @@ if (!await photoGallery.hasPermission()) {
 ### Working with Albums
 
 ```dart
- // Get all albums
-_albums = await _photoGallery.getAlbums();
+// Get all albums
+final albums = await photoGallery.getAlbums();
 
 // Or get only image albums
-final imageAlbums = await _photoGallery.getAlbums(type: MediaType.image);
-
-// Or get only video albums
-final videoAlbums = await _photoGallery.getAlbums(type: MediaType.video);
-
-// Get only image albums
 final imageAlbums = await photoGallery.getAlbums(type: MediaType.image);
 
-// Get only video albums
+// Or get only video albums
 final videoAlbums = await photoGallery.getAlbums(type: MediaType.video);
 
 // Get album thumbnail
@@ -106,15 +115,18 @@ final thumbnail = await photoGallery.getThumbnail(
 );
 ```
 
+## Platform Specific Notes
+
+### Linux
+
+- No explicit permissions are required
+- Uses the standard Pictures directory for media access
+- Supports common image formats (JPG, PNG) and video formats (MP4, AVI, MKV)
+- Thumbnails are generated using GDK-Pixbuf
+
 ## Example
 
 Check the [example](example) directory for a complete sample app demonstrating all features.
-
-## Platform Support
-
-| Android | iOS |
-|:-------:|:---:|
-|    ✅    |  ✅  |
 
 ## Contributing
 
@@ -127,4 +139,4 @@ Feel free to contribute to this project by:
 
 ## License
 
-- [LICENSE](LICENSE)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

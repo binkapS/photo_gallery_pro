@@ -8,6 +8,11 @@
 * Added proper error states and loading indicators
 * Fixed media type detection in thumbnail generation
 * Added documentation for new features
+* Added Linux platform support:
+  * Album browsing and filtering
+  * Thumbnail generation using GDK-Pixbuf
+  * Media browsing within albums
+  * Direct file system access via Pictures directory
 
 ## 0.0.3
 
@@ -18,6 +23,9 @@
 * Added proper resource cleanup in platform code
 * Fixed video thumbnail generation on Android
 * Updated documentation with new examples
+* Added support for video thumbnails on iOS and Android
+* Improved error handling
+* Fixed album sorting issues
 
 ## 0.0.2
 
@@ -27,6 +35,13 @@
 * Added example implementation
 * Initial iOS support
 * Initial Android support
+* Added support for:
+  * Album filtering by media type
+  * Album thumbnails
+  * Media thumbnails
+  * Permission handling
+* Improved documentation
+* Added example app
 
 ## 0.0.1
 
@@ -34,3 +49,7 @@
 * Basic album and media fetching
 * Permission handling
 * Platform interface definition
+* Basic functionality:
+  * List albums
+  * Get media in albums
+  * Basic permission handling

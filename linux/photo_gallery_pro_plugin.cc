@@ -9,14 +9,11 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#include <cstring>
-
-#include "photo_gallery_pro_plugin_private.h"
-
 #define PHOTO_GALLERY_PRO_PLUGIN(obj) \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), photo_gallery_pro_plugin_get_type(), \
-                              PhotoGalleryProPlugin))
+                             PhotoGalleryProPlugin))
 
+// Plugin class structure
 struct _PhotoGalleryProPlugin {
   GObject parent_instance;
 };
@@ -27,32 +24,41 @@ G_DEFINE_TYPE(PhotoGalleryProPlugin, photo_gallery_pro_plugin, g_object_get_type
 static int get_media_count(const gchar* dir_path, const gchar* media_type);
 static void process_directory(const gchar* dir_path, const gchar* media_type, FlValue* albums);
 static gchar* get_first_media_in_album(const gchar* album_id, const gchar* media_type);
+static GdkPixbuf* generate_thumbnail(const gchar* file_path, int width, int height, GError** error);
+static FlMethodResponse* get_album_thumbnail(FlMethodCall* method_call);
+static FlMethodResponse* get_thumbnail(FlMethodCall* method_call);
 
-// Helper function implementations
+// Helper function to count media files in a directory
 static int get_media_count(const gchar* dir_path, const gchar* media_type) {
     DIR* dir = opendir(dir_path);
-    if (dir == NULL) return 0;
-    
+    if (!dir) return 0;
+
     int count = 0;
     struct dirent* entry;
+    
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            gchar* extension = strrchr(entry->d_name, '.');
-            if (extension != NULL) {
+        if (entry->d_type == DT_REG) {  // Regular file
+            gchar* file_path = g_build_filename(dir_path, entry->d_name, NULL);
+            
+            // Check file extension
+            const gchar* extension = strrchr(entry->d_name, '.');
+            if (extension) {
+                extension++; // Skip the dot
                 if (g_strcmp0(media_type, "image") == 0) {
-                    if (g_ascii_strcasecmp(extension, ".jpg") == 0 ||
-                        g_ascii_strcasecmp(extension, ".jpeg") == 0 ||
-                        g_ascii_strcasecmp(extension, ".png") == 0) {
+                    if (g_ascii_strcasecmp(extension, "jpg") == 0 ||
+                        g_ascii_strcasecmp(extension, "jpeg") == 0 ||
+                        g_ascii_strcasecmp(extension, "png") == 0) {
                         count++;
                     }
                 } else if (g_strcmp0(media_type, "video") == 0) {
-                    if (g_ascii_strcasecmp(extension, ".mp4") == 0 ||
-                        g_ascii_strcasecmp(extension, ".mov") == 0 ||
-                        g_ascii_strcasecmp(extension, ".avi") == 0) {
+                    if (g_ascii_strcasecmp(extension, "mp4") == 0 ||
+                        g_ascii_strcasecmp(extension, "avi") == 0 ||
+                        g_ascii_strcasecmp(extension, "mkv") == 0) {
                         count++;
                     }
                 }
             }
+            g_free(file_path);
         }
     }
     
@@ -60,79 +66,81 @@ static int get_media_count(const gchar* dir_path, const gchar* media_type) {
     return count;
 }
 
+// Process directory to find albums
 static void process_directory(const gchar* dir_path, const gchar* media_type, FlValue* albums) {
-    if (dir_path == NULL) return;
-    
     DIR* dir = opendir(dir_path);
-    if (dir == NULL) return;
-    
+    if (!dir) return;
+
     struct dirent* entry;
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR && 
-            g_strcmp0(entry->d_name, ".") != 0 && 
-            g_strcmp0(entry->d_name, "..") != 0) {
-            
-            FlValue* album = fl_value_new_map();
-            
-            // Set values directly with fl_value_set
-            fl_value_set(album,
-                        fl_value_new_string("id"),
-                        fl_value_new_string(entry->d_name));
-            fl_value_set(album,
-                        fl_value_new_string("name"),
-                        fl_value_new_string(entry->d_name));
-            fl_value_set(album,
-                        fl_value_new_string("type"),
-                        fl_value_new_string(media_type));
-            
-            // Get media count
+        // Skip . and ..
+        if (g_strcmp0(entry->d_name, ".") == 0 || 
+            g_strcmp0(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        if (entry->d_type == DT_DIR) {
             gchar* full_path = g_build_filename(dir_path, entry->d_name, NULL);
             int count = get_media_count(full_path, media_type);
-            fl_value_set(album,
-                        fl_value_new_string("count"),
-                        fl_value_new_int(count));
-            g_free(full_path);
             
-            // Append to albums list
-            fl_value_append(albums, album);
+            if (count > 0) {
+                // Create album object
+                g_autoptr(FlValue) album = fl_value_new_map();
+                
+                // Set album properties
+                fl_value_set(album, fl_value_new_string("id"), 
+                            fl_value_new_string(entry->d_name));
+                fl_value_set(album, fl_value_new_string("name"), 
+                            fl_value_new_string(entry->d_name));
+                fl_value_set(album, fl_value_new_string("type"), 
+                            fl_value_new_string(media_type));
+                fl_value_set(album, fl_value_new_string("count"), 
+                            fl_value_new_int(count));
+                
+                // Add to albums list
+                fl_value_append(albums, album);
+            }
+            
+            g_free(full_path);
         }
     }
     
     closedir(dir);
 }
 
+// Find first media file in an album
 static gchar* get_first_media_in_album(const gchar* album_id, const gchar* media_type) {
-    const gchar* base_dir = g_strcmp0(media_type, "image") == 0 ?
-        g_get_user_special_dir(G_USER_DIRECTORY_PICTURES) :
-        g_get_user_special_dir(G_USER_DIRECTORY_VIDEOS);
-    
-    if (base_dir == NULL) return NULL;
-    
+    const gchar* base_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
+    if (!base_dir) return NULL;
+
     gchar* album_path = g_build_filename(base_dir, album_id, NULL);
     DIR* dir = opendir(album_path);
-    if (dir == NULL) {
+    if (!dir) {
         g_free(album_path);
         return NULL;
     }
-    
-    struct dirent* entry;
+
     gchar* result = NULL;
+    struct dirent* entry;
     
-    while ((entry = readdir(dir)) != NULL && result == NULL) {
+    while ((entry = readdir(dir)) != NULL) {
         if (entry->d_type == DT_REG) {
-            gchar* extension = strrchr(entry->d_name, '.');
-            if (extension != NULL) {
+            const gchar* extension = strrchr(entry->d_name, '.');
+            if (extension) {
+                extension++; // Skip the dot
                 if (g_strcmp0(media_type, "image") == 0) {
-                    if (g_ascii_strcasecmp(extension, ".jpg") == 0 ||
-                        g_ascii_strcasecmp(extension, ".jpeg") == 0 ||
-                        g_ascii_strcasecmp(extension, ".png") == 0) {
+                    if (g_ascii_strcasecmp(extension, "jpg") == 0 ||
+                        g_ascii_strcasecmp(extension, "jpeg") == 0 ||
+                        g_ascii_strcasecmp(extension, "png") == 0) {
                         result = g_build_filename(album_path, entry->d_name, NULL);
+                        break;
                     }
                 } else if (g_strcmp0(media_type, "video") == 0) {
-                    if (g_ascii_strcasecmp(extension, ".mp4") == 0 ||
-                        g_ascii_strcasecmp(extension, ".mov") == 0 ||
-                        g_ascii_strcasecmp(extension, ".avi") == 0) {
+                    if (g_ascii_strcasecmp(extension, "mp4") == 0 ||
+                        g_ascii_strcasecmp(extension, "avi") == 0 ||
+                        g_ascii_strcasecmp(extension, "mkv") == 0) {
                         result = g_build_filename(album_path, entry->d_name, NULL);
+                        break;
                     }
                 }
             }
@@ -144,175 +152,302 @@ static gchar* get_first_media_in_album(const gchar* album_id, const gchar* media
     return result;
 }
 
-static FlMethodResponse* get_albums(FlMethodCall* method_call) {
-  FlValue* args = fl_method_call_get_args(method_call);
-  const gchar* media_type = fl_value_get_string(fl_value_lookup_string(args, "mediaType"));
-  
-  g_autoptr(FlValue) albums = fl_value_new_list();
-  
-  // Get user's media directories
-  const gchar* pictures_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
-  const gchar* videos_dir = g_get_user_special_dir(G_USER_DIRECTORY_VIDEOS);
-  
-  // Process directories based on media type
-  if (media_type == NULL || strcmp(media_type, "image") == 0) {
-    process_directory(pictures_dir, "image", albums);
-  }
-  
-  if (media_type == NULL || strcmp(media_type, "video") == 0) {
-    process_directory(videos_dir, "video", albums);
-  }
-  
-  return FL_METHOD_RESPONSE(fl_method_success_response_new(albums));
+// Helper function to generate thumbnails
+static GdkPixbuf* generate_thumbnail(const gchar* file_path, int width, int height, GError** error) {
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file(file_path, error);
+    if (!pixbuf) {
+        return NULL;
+    }
+
+    // Calculate aspect ratio
+    int orig_width = gdk_pixbuf_get_width(pixbuf);
+    int orig_height = gdk_pixbuf_get_height(pixbuf);
+    double scale = MIN((double)width / orig_width, (double)height / orig_height);
+
+    int new_width = (int)(orig_width * scale);
+    int new_height = (int)(orig_height * scale);
+
+    // Create scaled thumbnail
+    GdkPixbuf* thumbnail = gdk_pixbuf_scale_simple(pixbuf,
+                                                  new_width,
+                                                  new_height,
+                                                  GDK_INTERP_BILINEAR);
+    g_object_unref(pixbuf);
+    
+    return thumbnail;
 }
 
+// Method to get album thumbnail
 static FlMethodResponse* get_album_thumbnail(FlMethodCall* method_call) {
-  FlValue* args = fl_method_call_get_args(method_call);
-  const gchar* album_id = fl_value_get_string(fl_value_lookup_string(args, "albumId"));
-  const gchar* media_type = fl_value_get_string(fl_value_lookup_string(args, "mediaType"));
-  
-  // Get first media file in album
-  gchar* first_media = get_first_media_in_album(album_id, media_type);
-  if (first_media == NULL) {
-    return FL_METHOD_RESPONSE(fl_method_error_response_new(
-      "THUMBNAIL_ERROR",
-      "No media found in album",
-      NULL));
-  }
-  
-  // Generate thumbnail
-  GError* error = NULL;
-  GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file_at_scale(
-    first_media,
-    320,  // width
-    320,  // height
-    TRUE, // preserve aspect ratio
-    &error
-  );
-  
-  g_free(first_media);
-  
-  if (error != NULL) {
-    g_autoptr(FlValue) error_details = fl_value_new_map();
-    // Create and set error message
-    fl_value_set(error_details,
-                 fl_value_new_string("message"),
-                 fl_value_new_string(error->message));
-    g_error_free(error);
-    return FL_METHOD_RESPONSE(fl_method_error_response_new(
-        "THUMBNAIL_ERROR",
-        "Failed to generate thumbnail",
-        error_details));
-  }
-  
-  // Convert to JPEG
-  gchar* buffer;
-  gsize buffer_size;
-  gdk_pixbuf_save_to_buffer(
-    pixbuf,
-    &buffer,
-    &buffer_size,
-    "jpeg",
-    &error,
-    "quality", "90",
-    NULL
-  );
-  
-  g_object_unref(pixbuf);
-  
-  if (error != NULL) {
-    g_error_free(error);
-    return FL_METHOD_RESPONSE(fl_method_error_response_new(
-      "THUMBNAIL_ERROR",
-      "Failed to encode thumbnail",
-      NULL));
-  }
-  
-  g_autoptr(FlValue) result = fl_value_new_uint8_list((const uint8_t*)buffer, buffer_size);
-  g_free(buffer);
-  
-  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
-}
-
-// Add missing getThumbnail implementation
-static FlMethodResponse* get_thumbnail(FlMethodCall* method_call) {
     FlValue* args = fl_method_call_get_args(method_call);
-    const gchar* media_id = fl_value_get_string(fl_value_lookup_string(args, "mediaId"));
+    const gchar* album_id = fl_value_get_string(fl_value_lookup_string(args, "albumId"));
     const gchar* media_type = fl_value_get_string(fl_value_lookup_string(args, "mediaType"));
     
-    if (media_id == NULL || media_type == NULL) {
+    // Find first media file in album
+    gchar* media_path = get_first_media_in_album(album_id, media_type);
+    if (!media_path) {
         return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "INVALID_ARGUMENTS",
-            "Media ID and type are required",
-            NULL));
+            "THUMBNAIL_ERROR",
+            "No media found in album",
+            nullptr));
     }
-    
-    // Get the file path based on media type and ID
-    const gchar* base_dir = g_strcmp0(media_type, "image") == 0 ?
-        g_get_user_special_dir(G_USER_DIRECTORY_PICTURES) :
-        g_get_user_special_dir(G_USER_DIRECTORY_VIDEOS);
-        
-    if (base_dir == NULL) {
-        return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "PATH_ERROR",
-            "Could not locate media directory",
-            NULL));
-    }
-    
-    gchar* file_path = g_build_filename(base_dir, media_id, NULL);
-    
+
     // Generate thumbnail
     GError* error = NULL;
-    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file_at_scale(
-        file_path,
-        320,  // width
-        320,  // height
-        TRUE, // preserve aspect ratio
-        &error
-    );
-    
-    g_free(file_path);
-    
+    GdkPixbuf* thumbnail = generate_thumbnail(media_path, 200, 200, &error);
+    g_free(media_path);
+
     if (error != NULL) {
         g_autoptr(FlValue) error_details = fl_value_new_map();
-        // Create and set error message
-        fl_value_set(error_details,
-                     fl_value_new_string("message"),
-                     fl_value_new_string(error->message));
+        fl_value_set(error_details, 
+                    fl_value_new_string("message"),
+                    fl_value_new_string(error->message));
         g_error_free(error);
         return FL_METHOD_RESPONSE(fl_method_error_response_new(
             "THUMBNAIL_ERROR",
             "Failed to generate thumbnail",
             error_details));
     }
-    
-    // Convert to JPEG
+
+    // Convert to bytes
     gchar* buffer;
     gsize buffer_size;
-    gdk_pixbuf_save_to_buffer(
-        pixbuf,
-        &buffer,
-        &buffer_size,
-        "jpeg",
-        &error,
-        "quality", "90",
-        NULL
-    );
-    
-    g_object_unref(pixbuf);
-    
+    gdk_pixbuf_save_to_buffer(thumbnail, &buffer, &buffer_size, "png", &error, NULL);
+    g_object_unref(thumbnail);
+
     if (error != NULL) {
+        g_autoptr(FlValue) error_details = fl_value_new_map();
+        fl_value_set(error_details,
+                    fl_value_new_string("message"),
+                    fl_value_new_string(error->message));
         g_error_free(error);
         return FL_METHOD_RESPONSE(fl_method_error_response_new(
             "THUMBNAIL_ERROR",
-            "Failed to encode thumbnail",
-            NULL));
+            "Failed to convert thumbnail",
+            error_details));
     }
-    
+
+    // Create response
     g_autoptr(FlValue) result = fl_value_new_uint8_list((const uint8_t*)buffer, buffer_size);
     g_free(buffer);
-    
+
     return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
+// Method to get media thumbnail
+static FlMethodResponse* get_thumbnail(FlMethodCall* method_call) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    const gchar* media_id = fl_value_get_string(fl_value_lookup_string(args, "mediaId"));
+
+    // Build file path
+    const gchar* base_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
+    if (!base_dir) {
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "THUMBNAIL_ERROR",
+            "Could not locate Pictures directory",
+            nullptr));
+    }
+
+    gchar* media_path = g_build_filename(base_dir, media_id, NULL);
+
+    // Generate thumbnail
+    GError* error = NULL;
+    GdkPixbuf* thumbnail = generate_thumbnail(media_path, 200, 200, &error);
+    g_free(media_path);
+
+    if (error != NULL) {
+        g_autoptr(FlValue) error_details = fl_value_new_map();
+        fl_value_set(error_details,
+                    fl_value_new_string("message"),
+                    fl_value_new_string(error->message));
+        g_error_free(error);
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "THUMBNAIL_ERROR",
+            "Failed to generate thumbnail",
+            error_details));
+    }
+
+    // Convert to bytes
+    gchar* buffer;
+    gsize buffer_size;
+    gdk_pixbuf_save_to_buffer(thumbnail, &buffer, &buffer_size, "png", &error, NULL);
+    g_object_unref(thumbnail);
+
+    if (error != NULL) {
+        g_autoptr(FlValue) error_details = fl_value_new_map();
+        fl_value_set(error_details,
+                    fl_value_new_string("message"),
+                    fl_value_new_string(error->message));
+        g_error_free(error);
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "THUMBNAIL_ERROR",
+            "Failed to convert thumbnail",
+            error_details));
+    }
+
+    // Create response
+    g_autoptr(FlValue) result = fl_value_new_uint8_list((const uint8_t*)buffer, buffer_size);
+    g_free(buffer);
+
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
+// Method to check permissions (Linux doesn't require explicit permissions)
+static FlMethodResponse* has_permission(FlMethodCall* method_call) {
+    g_autoptr(FlValue) result = fl_value_new_bool(TRUE);
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
+// Method to request permissions (Linux doesn't require explicit permissions)
+static FlMethodResponse* request_permission(FlMethodCall* method_call) {
+    g_autoptr(FlValue) result = fl_value_new_bool(TRUE);
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+}
+
+// Method to get media items in an album
+static FlMethodResponse* get_media_in_album(FlMethodCall* method_call) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    const gchar* album_id = fl_value_get_string(fl_value_lookup_string(args, "albumId"));
+    const gchar* media_type = fl_value_get_string(fl_value_lookup_string(args, "mediaType"));
+
+    // Get base directory
+    const gchar* base_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
+    if (!base_dir) {
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "DIRECTORY_ERROR",
+            "Could not locate Pictures directory",
+            nullptr));
+    }
+
+    // Build album path
+    gchar* album_path = g_build_filename(base_dir, album_id, NULL);
+    DIR* dir = opendir(album_path);
+    if (!dir) {
+        g_free(album_path);
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "ALBUM_ERROR",
+            "Could not open album directory",
+            nullptr));
+    }
+
+    // Create media list
+    g_autoptr(FlValue) media_list = fl_value_new_list();
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_REG) {
+            const gchar* extension = strrchr(entry->d_name, '.');
+            if (extension) {
+                extension++; // Skip the dot
+                bool is_valid = false;
+
+                if (g_strcmp0(media_type, "image") == 0) {
+                    is_valid = g_ascii_strcasecmp(extension, "jpg") == 0 ||
+                              g_ascii_strcasecmp(extension, "jpeg") == 0 ||
+                              g_ascii_strcasecmp(extension, "png") == 0;
+                } else if (g_strcmp0(media_type, "video") == 0) {
+                    is_valid = g_ascii_strcasecmp(extension, "mp4") == 0 ||
+                              g_ascii_strcasecmp(extension, "avi") == 0 ||
+                              g_ascii_strcasecmp(extension, "mkv") == 0;
+                }
+
+                if (is_valid) {
+                    // Get file information
+                    gchar* file_path = g_build_filename(album_path, entry->d_name, NULL);
+                    struct stat st;
+                    stat(file_path, &st);
+
+                    // Create media item
+                    g_autoptr(FlValue) media_item = fl_value_new_map();
+                    fl_value_set(media_item, fl_value_new_string("id"),
+                                fl_value_new_string(entry->d_name));
+                    fl_value_set(media_item, fl_value_new_string("name"),
+                                fl_value_new_string(entry->d_name));
+                    fl_value_set(media_item, fl_value_new_string("type"),
+                                fl_value_new_string(media_type));
+                    fl_value_set(media_item, fl_value_new_string("album"),
+                                fl_value_new_string(album_id));
+                    fl_value_set(media_item, fl_value_new_string("dateAdded"),
+                                fl_value_new_int(st.st_mtime));
+
+                    // Add to list
+                    fl_value_append(media_list, media_item);
+                    g_free(file_path);
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+    g_free(album_path);
+
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(media_list));
+}
+
+// Method handler implementation
+static FlMethodResponse* get_albums(FlMethodCall* method_call) {
+  FlValue* args = fl_method_call_get_args(method_call);
+  const gchar* media_type = nullptr;
+  
+  // Safely get media type from arguments
+  if (args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+    FlValue* media_type_value = fl_value_lookup_string(args, "mediaType");
+    if (media_type_value != nullptr) {
+      media_type = fl_value_get_string(media_type_value);
+    }
+  }
+  
+  // Get Pictures directory path
+  const gchar* pictures_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
+  if (!pictures_dir) {
+    return FL_METHOD_RESPONSE(fl_method_error_response_new(
+      "DIRECTORY_ERROR",
+      "Could not locate Pictures directory",
+      nullptr));
+  }
+  
+  // Create albums array
+  g_autoptr(FlValue) albums = fl_value_new_list();
+  
+  // Process directories with media type filter
+  process_directory(pictures_dir, media_type, albums);
+  
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(albums));
+}
+
+// Called when a method call is received from Flutter.
+static void photo_gallery_pro_plugin_handle_method_call(
+    PhotoGalleryProPlugin* self,
+    FlMethodCall* method_call) {
+  g_autoptr(FlMethodResponse) response = nullptr;
+
+  const gchar* method = fl_method_call_get_name(method_call);
+
+  if (strcmp(method, "getAlbums") == 0) {
+    response = get_albums(method_call);
+  } else if (strcmp(method, "getAlbumThumbnail") == 0) {
+    response = get_album_thumbnail(method_call);
+  } else if (strcmp(method, "getThumbnail") == 0) {
+    response = get_thumbnail(method_call);
+  } else if (strcmp(method, "getMediaInAlbum") == 0) {
+    response = get_media_in_album(method_call);
+  } else if (strcmp(method, "hasPermission") == 0) {
+    response = has_permission(method_call);
+  } else if (strcmp(method, "requestPermission") == 0) {
+    response = request_permission(method_call);
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
+FlMethodResponse* get_platform_version() {
+  struct utsname uname_data = {};
+  uname(&uname_data);
+  g_autofree gchar *version = g_strdup_printf("Linux %s", uname_data.version);
+  g_autoptr(FlValue) result = fl_value_new_string(version);
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
 static void photo_gallery_pro_plugin_dispose(GObject* object) {
@@ -327,42 +462,23 @@ static void photo_gallery_pro_plugin_init(PhotoGalleryProPlugin* self) {}
 
 static void method_call_cb(FlMethodChannel* channel, FlMethodCall* method_call,
                            gpointer user_data) {
-    const gchar* method = fl_method_call_get_name(method_call);
-    
-    g_autoptr(FlMethodResponse) response = NULL;
-    if (g_strcmp0(method, "getAlbums") == 0) {
-        response = get_albums(method_call);
-    } else if (g_strcmp0(method, "getAlbumThumbnail") == 0) {
-        response = get_album_thumbnail(method_call);
-    } else if (g_strcmp0(method, "getThumbnail") == 0) {
-        response = get_thumbnail(method_call);
-    } else if (g_strcmp0(method, "hasPermission") == 0) {
-        // Linux doesn't require explicit permissions for accessing Pictures/Videos
-        g_autoptr(FlValue) result = fl_value_new_bool(TRUE);
-        response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
-    } else if (g_strcmp0(method, "requestPermission") == 0) {
-        // Linux doesn't require explicit permissions
-        g_autoptr(FlValue) result = fl_value_new_bool(TRUE);
-        response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
-    } else {
-        response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
-    }
-    
-    fl_method_call_respond(method_call, response, NULL);
+  PhotoGalleryProPlugin* plugin = PHOTO_GALLERY_PRO_PLUGIN(user_data);
+  photo_gallery_pro_plugin_handle_method_call(plugin, method_call);
 }
 
 void photo_gallery_pro_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
   PhotoGalleryProPlugin* plugin = PHOTO_GALLERY_PRO_PLUGIN(
       g_object_new(photo_gallery_pro_plugin_get_type(), nullptr));
-
+      
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) channel =
       fl_method_channel_new(fl_plugin_registrar_get_messenger(registrar),
-                            "photo_gallery_pro",
-                            FL_METHOD_CODEC(codec));
+                           "photo_gallery_pro",
+                           FL_METHOD_CODEC(codec));
+                           
   fl_method_channel_set_method_call_handler(channel, method_call_cb,
-                                            g_object_ref(plugin),
-                                            g_object_unref);
+                                           g_object_ref(plugin),
+                                           g_object_unref);
 
   g_object_unref(plugin);
 }

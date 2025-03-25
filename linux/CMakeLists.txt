@@ -7,18 +7,6 @@ cmake_minimum_required(VERSION 3.10)
 set(PROJECT_NAME "photo_gallery_pro")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
-# Define standard settings function
-function(APPLY_STANDARD_SETTINGS TARGET)
-  target_compile_features(${TARGET} PUBLIC cxx_std_14)
-  target_compile_options(${TARGET} PRIVATE -Wall -Werror)
-  target_compile_options(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
-  target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
-endfunction()
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
-pkg_check_modules(GDK_PIXBUF REQUIRED IMPORTED_TARGET gdk-pixbuf-2.0)
-
 # This value is used when generating builds using this plugin, so it must
 # not be changed.
 set(PLUGIN_NAME "photo_gallery_pro_plugin")
@@ -46,42 +34,12 @@ set_target_properties(${PLUGIN_NAME} PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 
-# Configure Flutter Linux dependencies
-if(DEFINED ENV{FLUTTER_ROOT})
-  set(FLUTTER_ROOT $ENV{FLUTTER_ROOT})
-  set(FLUTTER_LINUX_INCLUDE_PATH "${FLUTTER_ROOT}/bin/cache/artifacts/engine/linux-x64/include")
-  set(FLUTTER_LINUX_LIB_PATH "${FLUTTER_ROOT}/bin/cache/artifacts/engine/linux-x64")
-else()
-  message(FATAL_ERROR "Flutter SDK not found. Please set FLUTTER_ROOT environment variable.")
-endif()
-
-# Ensure Flutter Linux headers are available
-execute_process(
-  COMMAND "${FLUTTER_ROOT}/bin/flutter" assemble --no-version-check
-    -dTargetPlatform=linux-x64
-    -dBuildMode=debug
-    --output-directory="${CMAKE_BINARY_DIR}/flutter"
-    linux-x64
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-# Add Flutter Linux include paths
-list(APPEND FLUTTER_LINUX_INCLUDE_DIRS
-  "${FLUTTER_LINUX_INCLUDE_PATH}"
-  "${CMAKE_BINARY_DIR}/flutter/flutter_linux"
-  "${CMAKE_BINARY_DIR}/flutter/ephemeral"
-)
-
 # Source include directories and library dependencies. Add any plugin-specific
 # dependencies here.
-target_include_directories(${PLUGIN_NAME} PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include"
-  "${FLUTTER_LINUX_INCLUDE_PATH}")
-
-target_link_libraries(${PLUGIN_NAME} PRIVATE 
-  PkgConfig::GTK 
-  PkgConfig::GDK_PIXBUF
-  flutter-engine)
+target_include_directories(${PLUGIN_NAME} INTERFACE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(${PLUGIN_NAME} PRIVATE flutter)
+target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
@@ -92,51 +50,45 @@ set(photo_gallery_pro_bundled_libraries
 )
 
 # === Tests ===
-if(${include_${PROJECT_NAME}_tests})
-  if(${CMAKE_VERSION} VERSION_LESS "3.11.0")
-    message("Unit tests require CMake 3.11.0 or later")
-  else()
-    set(TEST_RUNNER "${PROJECT_NAME}_test")
-    enable_testing()
+# These unit tests can be run from a terminal after building the example.
 
-    # Add the Google Test dependency
-    include(FetchContent)
-    FetchContent_Declare(
-      googletest
-      URL https://github.com/google/googletest/archive/release-1.11.0.zip
-    )
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    set(INSTALL_GTEST OFF CACHE BOOL "Disable installation of googletest" FORCE)
-    FetchContent_MakeAvailable(googletest)
+# Only enable test builds when building the example (which sets this variable)
+# so that plugin clients aren't building the tests.
+if (${include_${PROJECT_NAME}_tests})
+if(${CMAKE_VERSION} VERSION_LESS "3.11.0")
+message("Unit tests require CMake 3.11.0 or later")
+else()
+set(TEST_RUNNER "${PROJECT_NAME}_test")
+enable_testing()
 
-    # Configure test executable
-    add_executable(${TEST_RUNNER}
-      test/photo_gallery_pro_plugin_test.cc
-      ${PLUGIN_SOURCES}
-    )
-    apply_standard_settings(${TEST_RUNNER})
+# Add the Google Test dependency.
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/release-1.11.0.zip
+)
+# Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+# Disable install commands for gtest so it doesn't end up in the bundle.
+set(INSTALL_GTEST OFF CACHE BOOL "Disable installation of googletest" FORCE)
 
-    # Add include directories
-    target_include_directories(${TEST_RUNNER} PRIVATE
-      "${CMAKE_CURRENT_SOURCE_DIR}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/include"
-      "${CMAKE_BINARY_DIR}/googletest-src/googletest/include"
-      "${CMAKE_BINARY_DIR}/googletest-src/googlemock/include"
-      ${FLUTTER_LINUX_INCLUDE_DIRS}
-    )
+FetchContent_MakeAvailable(googletest)
 
-    # Link libraries
-    target_link_libraries(${TEST_RUNNER} PRIVATE 
-      ${PLUGIN_NAME}
-      PkgConfig::GTK 
-      PkgConfig::GDK_PIXBUF 
-      "${FLUTTER_LINUX_LIB_PATH}/libflutter_linux_gtk.so"
-      gtest_main 
-      gmock
-    )
+# The plugin's exported API is not very useful for unit testing, so build the
+# sources directly into the test binary rather than using the shared library.
+add_executable(${TEST_RUNNER}
+  test/photo_gallery_pro_plugin_test.cc
+  ${PLUGIN_SOURCES}
+)
+apply_standard_settings(${TEST_RUNNER})
+target_include_directories(${TEST_RUNNER} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(${TEST_RUNNER} PRIVATE flutter)
+target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::GTK)
+target_link_libraries(${TEST_RUNNER} PRIVATE gtest_main gmock)
 
-    # Enable test discovery
-    include(GoogleTest)
-    gtest_discover_tests(${TEST_RUNNER})
-  endif()
-endif()
+# Enable automatic test discovery.
+include(GoogleTest)
+gtest_discover_tests(${TEST_RUNNER})
+
+endif()  # CMake version check
+endif()  # include_${PROJECT_NAME}_tests
