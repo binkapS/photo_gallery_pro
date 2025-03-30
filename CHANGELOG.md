@@ -1,3 +1,7 @@
+## 0.0.7
+
+* Updated docs
+
 ## 0.0.6
 
 * Added `path` field to Media model for accessing file system paths
