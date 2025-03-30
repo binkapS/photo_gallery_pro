@@ -6,6 +6,7 @@ import 'package:photo_gallery_pro/src/media_type.dart';
 abstract class Media {
   final String id;
   final String name;
+  final String path; // Add path field
   final DateTime dateAdded;
   final int size;
   final int width;
@@ -15,6 +16,7 @@ abstract class Media {
   const Media({
     required this.id,
     required this.name,
+    required this.path, // Add path parameter
     required this.dateAdded,
     required this.size,
     required this.width,
@@ -38,6 +40,7 @@ class ImageMedia extends Media {
   const ImageMedia({
     required super.id,
     required super.name,
+    required super.path, // Add path parameter
     required super.dateAdded,
     required super.size,
     required super.width,
@@ -48,6 +51,7 @@ class ImageMedia extends Media {
     return ImageMedia(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      path: json['path']?.toString() ?? '', // Add path from JSON
       dateAdded: DateTime.fromMillisecondsSinceEpoch(
         (json['dateAdded'] as int? ?? 0) * 1000,
       ),
@@ -58,7 +62,7 @@ class ImageMedia extends Media {
   }
 
   @override
-  String toString() => 'ImageMedia(id: $id, name: $name)';
+  String toString() => 'ImageMedia(id: $id, name: $name, path: $path)';
 }
 
 /// Represents a video file
@@ -68,6 +72,7 @@ class VideoMedia extends Media {
   const VideoMedia({
     required super.id,
     required super.name,
+    required super.path, // Add path parameter
     required super.dateAdded,
     required super.size,
     required super.width,
@@ -79,6 +84,7 @@ class VideoMedia extends Media {
     return VideoMedia(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      path: json['path']?.toString() ?? '', // Add path from JSON
       dateAdded: DateTime.fromMillisecondsSinceEpoch(
         (json['dateAdded'] as int? ?? 0) * 1000,
       ),
@@ -90,5 +96,6 @@ class VideoMedia extends Media {
   }
 
   @override
-  String toString() => 'VideoMedia(id: $id, name: $name, duration: $duration)';
+  String toString() =>
+      'VideoMedia(id: $id, name: $name, path: $path, duration: $duration)';
 }

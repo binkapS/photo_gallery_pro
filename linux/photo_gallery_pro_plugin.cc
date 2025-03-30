@@ -309,77 +309,91 @@ static FlMethodResponse* get_media_in_album(FlMethodCall* method_call) {
     FlValue* args = fl_method_call_get_args(method_call);
     const gchar* album_id = fl_value_get_string(fl_value_lookup_string(args, "albumId"));
     const gchar* media_type = fl_value_get_string(fl_value_lookup_string(args, "mediaType"));
-
-    // Get base directory
-    const gchar* base_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
-    if (!base_dir) {
-        return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "DIRECTORY_ERROR",
-            "Could not locate Pictures directory",
-            nullptr));
-    }
-
-    // Build album path
-    gchar* album_path = g_build_filename(base_dir, album_id, NULL);
-    DIR* dir = opendir(album_path);
-    if (!dir) {
-        g_free(album_path);
-        return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "ALBUM_ERROR",
-            "Could not open album directory",
-            nullptr));
-    }
-
-    // Create media list
+    
     g_autoptr(FlValue) media_list = fl_value_new_list();
-    struct dirent* entry;
+    g_autoptr(GFile) directory = g_file_new_for_path(album_id);
+    
+    g_autoptr(GFileEnumerator) enumerator = 
+        g_file_enumerate_children(directory,
+                                "standard::*",
+                                G_FILE_QUERY_INFO_NONE,
+                                nullptr,
+                                nullptr);
 
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_REG) {
-            const gchar* extension = strrchr(entry->d_name, '.');
-            if (extension) {
-                extension++; // Skip the dot
-                bool is_valid = false;
+    while (true) {
+        g_autoptr(GFileInfo) info = g_file_enumerator_next_file(enumerator, nullptr, nullptr);
+        if (!info) break;
 
-                if (g_strcmp0(media_type, "image") == 0) {
-                    is_valid = g_ascii_strcasecmp(extension, "jpg") == 0 ||
-                              g_ascii_strcasecmp(extension, "jpeg") == 0 ||
-                              g_ascii_strcasecmp(extension, "png") == 0;
-                } else if (g_strcmp0(media_type, "video") == 0) {
-                    is_valid = g_ascii_strcasecmp(extension, "mp4") == 0 ||
-                              g_ascii_strcasecmp(extension, "avi") == 0 ||
-                              g_ascii_strcasecmp(extension, "mkv") == 0;
-                }
+        const char* name = g_file_info_get_name(info);
+        const char* content_type = g_file_info_get_content_type(info);
+        
+        bool is_valid_type = false;
+        if (g_strcmp0(media_type, "image") == 0) {
+            is_valid_type = g_content_type_is_a(content_type, "image/*");
+        } else if (g_strcmp0(media_type, "video") == 0) {
+            is_valid_type = g_content_type_is_a(content_type, "video/*");
+        }
 
-                if (is_valid) {
-                    // Get file information
-                    gchar* file_path = g_build_filename(album_path, entry->d_name, NULL);
-                    struct stat st;
-                    stat(file_path, &st);
-
-                    // Create media item
-                    g_autoptr(FlValue) media_item = fl_value_new_map();
-                    fl_value_set(media_item, fl_value_new_string("id"),
-                                fl_value_new_string(entry->d_name));
-                    fl_value_set(media_item, fl_value_new_string("name"),
-                                fl_value_new_string(entry->d_name));
-                    fl_value_set(media_item, fl_value_new_string("type"),
-                                fl_value_new_string(media_type));
-                    fl_value_set(media_item, fl_value_new_string("album"),
-                                fl_value_new_string(album_id));
-                    fl_value_set(media_item, fl_value_new_string("dateAdded"),
-                                fl_value_new_int(st.st_mtime));
-
-                    // Add to list
-                    fl_value_append(media_list, media_item);
-                    g_free(file_path);
+        if (is_valid_type) {
+            g_autoptr(GFile) file = g_file_get_child(directory, name);
+            g_autofree char* path = g_file_get_path(file);
+            
+            g_autoptr(FlValue) media_info = fl_value_new_map();
+            
+            // Get file info
+            g_autoptr(GFileInfo) file_info = 
+                g_file_query_info(file,
+                                "standard::*,time::modified",
+                                G_FILE_QUERY_INFO_NONE,
+                                nullptr,
+                                nullptr);
+                                
+            guint64 size = g_file_info_get_size(file_info);
+            guint64 mtime = g_file_info_get_attribute_uint64(file_info, "time::modified");
+            
+            // Add basic file information
+            fl_value_set(media_info, 
+                        fl_value_new_string("id"),
+                        fl_value_new_string(path));
+            fl_value_set(media_info,
+                        fl_value_new_string("name"),
+                        fl_value_new_string(name));
+            fl_value_set(media_info,
+                        fl_value_new_string("path"),
+                        fl_value_new_string(path));
+            fl_value_set(media_info,
+                        fl_value_new_string("dateAdded"),
+                        fl_value_new_int(mtime));
+            fl_value_set(media_info,
+                        fl_value_new_string("size"),
+                        fl_value_new_int(size));
+            fl_value_set(media_info,
+                        fl_value_new_string("type"),
+                        fl_value_new_string(media_type));
+            
+            // Get image dimensions using GdkPixbuf
+            if (g_content_type_is_a(content_type, "image/*")) {
+                g_autoptr(GdkPixbuf) pixbuf = gdk_pixbuf_new_from_file(path, nullptr);
+                if (pixbuf) {
+                    fl_value_set(media_info, 
+                                fl_value_new_string("width"),
+                                fl_value_new_int(gdk_pixbuf_get_width(pixbuf)));
+                    fl_value_set(media_info,
+                                fl_value_new_string("height"), 
+                                fl_value_new_int(gdk_pixbuf_get_height(pixbuf)));
+                } else {
+                    fl_value_set(media_info,
+                                fl_value_new_string("width"),
+                                fl_value_new_int(0));
+                    fl_value_set(media_info,
+                                fl_value_new_string("height"),
+                                fl_value_new_int(0));
                 }
             }
+            
+            fl_value_append(media_list, media_info);
         }
     }
-
-    closedir(dir);
-    g_free(album_path);
 
     return FL_METHOD_RESPONSE(fl_method_success_response_new(media_list));
 }

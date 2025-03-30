@@ -111,52 +111,78 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
     }
     
     private func getMediaInAlbum(albumId: String, mediaType: String, result: @escaping FlutterResult) {
-        let fetchOptions = PHFetchOptions()
-        
-        // Set predicate based on media type
-        switch mediaType {
-        case "image":
-            fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
-        case "video":
-            fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
-        default:
-            result(FlutterError(code: "INVALID_TYPE", message: "Invalid media type: \(mediaType)", details: nil))
-            return
-        }
-        
-        // Fetch assets in album
-        guard let collection = PHAssetCollection.fetchAssetCollections(
-            withLocalIdentifiers: [albumId],
-            options: nil
-        ).firstObject else {
-            result(FlutterError(code: "ALBUM_ERROR", message: "Album not found", details: nil))
-            return
-        }
-        
-        let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
+        let mediaList = getMediaInAlbum(albumId, mediaType: mediaType)
+        result(mediaList)
+    }
+    
+    private func getMediaInAlbum(_ albumId: String, mediaType: String) -> [[String: Any]] {
         var mediaList: [[String: Any]] = []
         
-        assets.enumerateObjects { (asset, index, _) in
-            var mediaItem: [String: Any] = [
-                "id": asset.localIdentifier,
-                // Explicitly set the type based on the asset's mediaType
-                "type": asset.mediaType == .image ? "image" : "video",
-                "name": asset.originalFilename ?? "",
-                "dateAdded": Int(asset.creationDate?.timeIntervalSince1970 ?? 0),
-                "width": asset.pixelWidth,
-                "height": asset.pixelHeight,
-                "size": asset.size
-            ]
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        
+        let album = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumId], options: nil)
+        guard let collection = album.firstObject else { return [] }
+        
+        let assetsFetchResult = PHAsset.fetchAssets(in: collection, options: fetchOptions)
+        
+        assetsFetchResult.enumerateObjects { (asset, index, stop) in
+            let resourceManager = PHAssetResourceManager.default()
+            let resources = PHAssetResource.assetResources(for: asset)
             
-            // Add duration for video assets
-            if asset.mediaType == .video {
-                mediaItem["duration"] = Int(asset.duration * 1000) // Convert to milliseconds
+            if let resource = resources.first {
+                var media: [String: Any] = [:]
+                media["id"] = asset.localIdentifier
+                media["name"] = resource.originalFilename
+                media["dateAdded"] = asset.creationDate?.timeIntervalSince1970 ?? 0
+                media["size"] = resource.value(forKey: "fileSize") as? Int ?? 0
+                media["width"] = asset.pixelWidth
+                media["height"] = asset.pixelHeight
+                media["type"] = mediaType.lowercased()
+                
+                // Get file path
+                var path: String = ""
+                if let fileURL = getAssetLocalURL(asset: asset) {
+                    path = fileURL.path
+                }
+                media["path"] = path
+                
+                mediaList.append(media)
             }
-            
-            mediaList.append(mediaItem)
         }
         
-        result(mediaList)
+        return mediaList
+    }
+
+    private func getAssetLocalURL(asset: PHAsset) -> URL? {
+        var localURL: URL?
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        if asset.mediaType == .image {
+            let options = PHImageRequestOptions()
+            options.isSynchronous = true
+            options.version = .original
+            
+            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { (data, _, _, info) in
+                if let fileURL = info?["PHImageFileURLKey"] as? URL {
+                    localURL = fileURL
+                }
+                semaphore.signal()
+            }
+        } else if asset.mediaType == .video {
+            let options = PHVideoRequestOptions()
+            options.version = .original
+            
+            PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { (avAsset, _, _) in
+                if let urlAsset = avAsset as? AVURLAsset {
+                    localURL = urlAsset.url
+                }
+                semaphore.signal()
+            }
+        }
+        
+        _ = semaphore.wait(timeout: .now() + 30)
+        return localURL
     }
     
     private func getThumbnail(mediaId: String, mediaType: String, result: @escaping FlutterResult) {

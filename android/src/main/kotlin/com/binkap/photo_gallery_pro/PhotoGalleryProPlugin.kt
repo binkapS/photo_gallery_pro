@@ -151,67 +151,7 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
     private fun getMediaInAlbum(albumId: String, mediaType: String, result: Result) {
         try {
-            val mediaList = mutableListOf<Map<String, Any>>()
-            
-            val (uri, projection, selection) = when (mediaType) {
-                "image" -> Triple(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(
-                        MediaStore.Images.Media._ID,
-                        MediaStore.Images.Media.DISPLAY_NAME,
-                        MediaStore.Images.Media.DATE_ADDED,
-                        MediaStore.Images.Media.SIZE,
-                        MediaStore.Images.Media.WIDTH,
-                        MediaStore.Images.Media.HEIGHT
-                    ),
-                    "${MediaStore.Images.Media.BUCKET_ID} = ?"
-                )
-                "video" -> Triple(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(
-                        MediaStore.Video.Media._ID,
-                        MediaStore.Video.Media.DISPLAY_NAME,
-                        MediaStore.Video.Media.DATE_ADDED,
-                        MediaStore.Video.Media.SIZE,
-                        MediaStore.Video.Media.WIDTH,
-                        MediaStore.Video.Media.HEIGHT,
-                        MediaStore.Video.Media.DURATION
-                    ),
-                    "${MediaStore.Video.Media.BUCKET_ID} = ?"
-                )
-                else -> {
-                    result.error("INVALID_TYPE", "Invalid media type", null)
-                    return
-                }
-            }
-
-            val cursor = context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                arrayOf(albumId),
-                null
-            )
-
-            cursor?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val media = mutableMapOf<String, Any>()
-                    media["id"] = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
-                    media["name"] = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME))
-                    media["dateAdded"] = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED))
-                    media["size"] = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE))
-                    media["width"] = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH))
-                    media["height"] = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT))
-                    media["type"] = mediaType
-                    
-                    if (mediaType == "video") {
-                        media["duration"] = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION))
-                    }
-                    
-                    mediaList.add(media)
-                }
-            }
-
+            val mediaList = getMediaInAlbum(albumId, mediaType)
             result.success(mediaList)
         } catch (e: Exception) {
             result.error(
@@ -220,6 +160,53 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                 e.stackTraceToString()
             )
         }
+    }
+
+    private fun getMediaInAlbum(albumId: String, mediaType: String): List<Map<String, Any>> {
+        val mediaList = mutableListOf<Map<String, Any>>()
+        
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.WIDTH,
+            MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.DATA  // This gets the file path
+        )
+        
+        val selection = "${MediaStore.MediaColumns.BUCKET_ID} = ?"
+        val selectionArgs = arrayOf(albumId)
+        
+        val uri = when (mediaType.toLowerCase()) {
+            "image" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            "video" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            else -> throw IllegalArgumentException("Unsupported media type: $mediaType")
+        }
+        
+        context.contentResolver.query(
+            uri,
+            projection,
+            selection,
+            selectionArgs,
+            null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val media = mutableMapOf<String, Any>()
+                media["id"] = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                media["name"] = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME))
+                media["dateAdded"] = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED))
+                media["size"] = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE))
+                media["width"] = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH))
+                media["height"] = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT))
+                media["path"] = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA))
+                media["type"] = mediaType.toLowerCase()
+                
+                mediaList.add(media)
+            }
+        }
+        
+        return mediaList
     }
 
     private fun getThumbnail(mediaId: String, mediaType: String, result: Result) {

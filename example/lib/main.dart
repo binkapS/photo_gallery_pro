@@ -312,7 +312,8 @@ class _HomePageState extends State<HomePage> {
 
             return InkWell(
               onTap: () {
-                // TODO: Implement full-screen viewer
+                debugPrint('media path: ${media.path}');
+                // Handle media tap (e.g., open in a new screen)
               },
               child: Stack(
                 fit: StackFit.expand,

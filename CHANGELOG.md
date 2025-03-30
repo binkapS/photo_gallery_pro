@@ -1,3 +1,10 @@
+## 0.0.6
+
+* Added `path` field to Media model for accessing file system paths
+* Fixed Linux implementation to properly return media file paths
+* Added proper error handling for inaccessible files
+* Updated documentation with path usage examples
+
 ## 0.0.5
 
 * Fixed Linux platform support:
