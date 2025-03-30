@@ -122,6 +122,54 @@ final thumbnail = await photoGallery.getThumbnail(
 );
 ```
 
+### Understanding the Models
+
+#### Album Model
+
+The `Album` model represents a collection of media items on the device:
+
+```dart
+final Album album = albums[0];
+
+print(album.id);        // Unique identifier for the album
+print(album.name);      // Display name (e.g., "Camera", "Screenshots")
+print(album.count);     // Number of media items in the album
+print(album.type);      // MediaType.image, MediaType.video, or MediaType.mixed
+```
+
+#### Media Model
+
+The `Media` model contains information about individual photos or videos:
+
+```dart
+final Media media = mediaList[0];
+
+print(media.id);        // Unique identifier for the media item
+print(media.filename);  // Original file name with extension
+print(media.type);      // MediaType.image or MediaType.video
+print(media.path);      // Path to the media file on the device
+print(media.created);   // DateTime when the media was created
+print(media.width);     // Original width in pixels
+print(media.height);    // Original height in pixels
+print(media.mimeType);  // MIME type (e.g., "image/jpeg", "video/mp4")
+print(media.duration);  // Duration for videos (null for images)
+```
+
+#### Thumbnail Model
+
+The `Thumbnail` model provides access to the preview image data:
+
+```dart
+final Thumbnail thumb = await photoGallery.getThumbnail(media.id);
+
+print(thumb.width);     // Width of the thumbnail in pixels
+print(thumb.height);    // Height of the thumbnail in pixels
+print(thumb.bytes);     // Raw bytes of the thumbnail image (Uint8List)
+
+// Example: Display thumbnail in an Image widget
+Image.memory(thumb.bytes)
+```
+
 ## Platform Specific Notes
 
 ### Linux
