@@ -1,5 +1,12 @@
 # Photo Gallery Pro
 
+<p align="center">
+  <a href="https://pub.dev/packages/photo_gallery_pro"><img src="https://img.shields.io/pub/v/photo_gallery_pro.svg" alt="pub.dev"></a>
+  <a href="https://github.com/binkapS#sponsor-me"><img src="https://img.shields.io/github/sponsors/binkapS" alt="Sponsoring"></a>
+  <a href="https://pub.dev/packages/photo_gallery_pro/score"><img src="https://img.shields.io/pub/likes/photo_gallery_pro" alt="likes"></a>
+  <a href="https://pub.dev/packages/photo_gallery_pro/score"><img src="https://img.shields.io/pub/points/photo_gallery_pro" alt="pub points"></a>
+</p>
+
 A Flutter plugin for accessing and managing photos and videos from the device gallery. Supports Android, iOS, and Linux platforms.
 
 ## Features
