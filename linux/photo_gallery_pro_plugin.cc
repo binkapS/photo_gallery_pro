@@ -296,10 +296,28 @@ static FlMethodResponse* get_thumbnail(FlMethodCall* method_call) {
             error_details));
     }
 
-    // Create response
-    g_autoptr(FlValue) result = fl_value_new_uint8_list((const uint8_t*)buffer, buffer_size);
-    g_free(buffer);
+    // Add size validation before creating response
+    if (buffer_size == 0) {
+        g_free(buffer);
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "THUMBNAIL_ERROR",
+            "Generated thumbnail has zero size",
+            nullptr));
+    }
 
+    // Create response with size validation
+    g_autoptr(FlValue) result = fl_value_new_map();
+    fl_value_set(result, 
+                 fl_value_new_string("bytes"),
+                 fl_value_new_uint8_list((const uint8_t*)buffer, buffer_size));
+    fl_value_set(result,
+                 fl_value_new_string("width"),
+                 fl_value_new_int(gdk_pixbuf_get_width(thumbnail)));
+    fl_value_set(result,
+                 fl_value_new_string("height"),
+                 fl_value_new_int(gdk_pixbuf_get_height(thumbnail)));
+
+    g_free(buffer);
     return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 

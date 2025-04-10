@@ -50,19 +50,27 @@ class PhotoGalleryPro {
   /// Generates or fetches a thumbnail for a specific media item
   Future<Thumbnail> getThumbnail(
     String mediaId, {
-    MediaType type = MediaType.image,
+    MediaType? type,
   }) async {
     try {
-      final dynamic thumbnailData = await _channel.invokeMethod(
+      final result = await _channel.invokeMethod(
         'getThumbnail',
-        {'mediaId': mediaId, 'mediaType': type.toString().split('.').last},
+        {
+          'mediaId': mediaId,
+          if (type != null) 'mediaType': type.toString().split('.').last,
+        },
       );
 
-      return Thumbnail.fromPlatformData(thumbnailData);
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error getting thumbnail: $e');
+      if (result == null) {
+        throw PlatformException(
+          code: 'NULL_RESULT',
+          message: 'Thumbnail generation failed',
+        );
       }
+
+      return Thumbnail.fromPlatformData(result);
+    } catch (e) {
+      print('Error getting thumbnail: $e');
       rethrow;
     }
   }
