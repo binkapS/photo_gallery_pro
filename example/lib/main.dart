@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:photo_gallery_pro/photo_gallery_pro.dart';
 
@@ -44,48 +45,38 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _initGallery() async {
     try {
-      if (!await _photoGallery.hasPermission()) {
-        final granted = await _photoGallery.requestPermission();
-        if (!granted) {
-          setState(() {
-            _error = 'Permission denied';
-            _loading = false;
-          });
-          return;
+      // On Linux, we don't need permission checks
+      if (!Platform.isLinux) {
+        if (!await _photoGallery.hasPermission()) {
+          final granted = await _photoGallery.requestPermission();
+          if (!granted) {
+            setState(() {
+              _error = 'Permission denied';
+              _loading = false;
+            });
+            return;
+          }
         }
       }
 
+      // Add debug print to track album loading
+      print('Loading albums...');
       final albums = await _photoGallery.getAlbums();
+      print('Loaded ${albums.length} albums');
+
       setState(() {
         _albums = albums;
         _loading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('Error loading albums: $e');
+      print('Stack trace: $stackTrace');
       setState(() {
         _error = e.toString();
         _loading = false;
       });
     }
   }
-
-  // Future<void> _loadAlbums() async {
-  //   final hasPermission = await _photoGallery.hasPermission();
-  //   if (!hasPermission) {
-  //     final granted = await _photoGallery.requestPermission();
-  //     if (!granted) return;
-  //   }
-
-  // // Get all albums
-  // _albums = await _photoGallery.getAlbums();
-
-  // // Or get only image albums
-  // // final imageAlbums = await _photoGallery.getAlbums(type: MediaType.image);
-
-  // // Or get only video albums
-  // // final videoAlbums = await _photoGallery.getAlbums(type: MediaType.video);
-
-  //   setState(() {});
-  // }
 
   Future<void> _loadAlbumMedia(Album album) async {
     setState(() {

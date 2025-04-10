@@ -249,73 +249,62 @@ static FlMethodResponse* get_album_thumbnail(FlMethodCall* method_call) {
 static FlMethodResponse* get_thumbnail(FlMethodCall* method_call) {
     FlValue* args = fl_method_call_get_args(method_call);
     const gchar* media_id = fl_value_get_string(fl_value_lookup_string(args, "mediaId"));
+    
+    GError* error = nullptr;
+    // Set default dimensions if not provided
+    int width = 512;   // Default width
+    int height = 512;  // Default height
 
-    // Build file path
-    const gchar* base_dir = g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
-    if (!base_dir) {
-        return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "THUMBNAIL_ERROR",
-            "Could not locate Pictures directory",
-            nullptr));
-    }
-
-    gchar* media_path = g_build_filename(base_dir, media_id, NULL);
-
-    // Generate thumbnail
-    GError* error = NULL;
-    GdkPixbuf* thumbnail = generate_thumbnail(media_path, 200, 200, &error);
-    g_free(media_path);
-
-    if (error != NULL) {
-        g_autoptr(FlValue) error_details = fl_value_new_map();
-        fl_value_set(error_details,
-                    fl_value_new_string("message"),
-                    fl_value_new_string(error->message));
-        g_error_free(error);
-        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+    // Generate the thumbnail
+    GdkPixbuf* thumbnail = generate_thumbnail(media_id, width, height, &error);
+    if (thumbnail == nullptr) {
+        g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(fl_method_error_response_new(
             "THUMBNAIL_ERROR",
             "Failed to generate thumbnail",
-            error_details));
+            fl_value_new_string(error ? error->message : "Unknown error")));
+        if (error) g_error_free(error);
+        return FL_METHOD_RESPONSE(response);
     }
 
-    // Convert to bytes
-    gchar* buffer;
-    gsize buffer_size;
-    gdk_pixbuf_save_to_buffer(thumbnail, &buffer, &buffer_size, "png", &error, NULL);
-    g_object_unref(thumbnail);
+    // Get the actual dimensions after scaling
+    int final_width = gdk_pixbuf_get_width(thumbnail);
+    int final_height = gdk_pixbuf_get_height(thumbnail);
 
-    if (error != NULL) {
-        g_autoptr(FlValue) error_details = fl_value_new_map();
-        fl_value_set(error_details,
-                    fl_value_new_string("message"),
-                    fl_value_new_string(error->message));
-        g_error_free(error);
+    // Ensure we have valid dimensions
+    if (final_width <= 0 || final_height <= 0) {
+        g_object_unref(thumbnail);
         return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "THUMBNAIL_ERROR",
-            "Failed to convert thumbnail",
-            error_details));
-    }
-
-    // Add size validation before creating response
-    if (buffer_size == 0) {
-        g_free(buffer);
-        return FL_METHOD_RESPONSE(fl_method_error_response_new(
-            "THUMBNAIL_ERROR",
-            "Generated thumbnail has zero size",
+            "DIMENSION_ERROR",
+            "Invalid thumbnail dimensions",
             nullptr));
     }
 
-    // Create response with size validation
+    // Convert to PNG format
+    gchar* buffer;
+    gsize buffer_size;
+    GError* png_error = nullptr;
+    gdk_pixbuf_save_to_buffer(thumbnail, &buffer, &buffer_size, "png", &png_error, nullptr);
+    g_object_unref(thumbnail);
+
+    if (png_error != nullptr) {
+        g_error_free(png_error);
+        return FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "CONVERSION_ERROR",
+            "Failed to convert thumbnail to PNG",
+            nullptr));
+    }
+
+    // Create response with dimensions
     g_autoptr(FlValue) result = fl_value_new_map();
     fl_value_set(result, 
-                 fl_value_new_string("bytes"),
+                 fl_value_new_string("data"),
                  fl_value_new_uint8_list((const uint8_t*)buffer, buffer_size));
     fl_value_set(result,
                  fl_value_new_string("width"),
-                 fl_value_new_int(gdk_pixbuf_get_width(thumbnail)));
+                 fl_value_new_int(final_width));
     fl_value_set(result,
                  fl_value_new_string("height"),
-                 fl_value_new_int(gdk_pixbuf_get_height(thumbnail)));
+                 fl_value_new_int(final_height));
 
     g_free(buffer);
     return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
