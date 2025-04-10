@@ -72,7 +72,6 @@ abstract class Media {
 ///
 /// Contains all properties from [Media] specific to image files.
 class ImageMedia extends Media {
-  /// Creates a new [ImageMedia] instance.
   const ImageMedia({
     required super.id,
     required super.name,

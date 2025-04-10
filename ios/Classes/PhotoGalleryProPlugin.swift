@@ -134,8 +134,13 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
                 var media: [String: Any] = [:]
                 media["id"] = asset.localIdentifier
                 media["name"] = resource.originalFilename
-                media["dateAdded"] = asset.creationDate?.timeIntervalSince1970 ?? 0
-                media["size"] = resource.value(forKey: "fileSize") as? Int ?? 0
+                media["dateAdded"] = Int(asset.creationDate?.timeIntervalSince1970 ?? 0)  // Convert to Int
+                // Convert file size to Int
+                if let fileSize = resource.value(forKey: "fileSize") as? Double {
+                    media["size"] = Int(fileSize)
+                } else {
+                    media["size"] = 0
+                }
                 media["width"] = asset.pixelWidth
                 media["height"] = asset.pixelHeight
                 media["type"] = mediaType.lowercased()
