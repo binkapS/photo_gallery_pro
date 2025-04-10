@@ -154,6 +154,10 @@ static gchar* get_first_media_in_album(const gchar* album_id, const gchar* media
 
 // Helper function to generate thumbnails
 static GdkPixbuf* generate_thumbnail(const gchar* file_path, int width, int height, GError** error) {
+    // Validate input dimensions
+    if (width <= 0) width = 512;  // Default width if invalid
+    if (height <= 0) height = 512; // Default height if invalid
+
     GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file(file_path, error);
     if (!pixbuf) {
         return NULL;
@@ -162,10 +166,17 @@ static GdkPixbuf* generate_thumbnail(const gchar* file_path, int width, int heig
     // Calculate aspect ratio
     int orig_width = gdk_pixbuf_get_width(pixbuf);
     int orig_height = gdk_pixbuf_get_height(pixbuf);
-    double scale = MIN((double)width / orig_width, (double)height / orig_height);
+    
+    // Maintain aspect ratio
+    double scale;
+    if (width == 0 || height == 0) {
+        scale = 1.0;
+    } else {
+        scale = MIN((double)width / orig_width, (double)height / orig_height);
+    }
 
-    int new_width = (int)(orig_width * scale);
-    int new_height = (int)(orig_height * scale);
+    int new_width = MAX((int)(orig_width * scale), 1);  // Ensure minimum size of 1
+    int new_height = MAX((int)(orig_height * scale), 1);
 
     // Create scaled thumbnail
     GdkPixbuf* thumbnail = gdk_pixbuf_scale_simple(pixbuf,
