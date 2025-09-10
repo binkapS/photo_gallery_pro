@@ -107,7 +107,7 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
             }
         }
         
-        result.success(albums)
+        result(albums)
     }
     
     private func getMediaInAlbum(albumId: String, mediaType: String, result: @escaping FlutterResult) {
