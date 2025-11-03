@@ -222,7 +222,10 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                 )
                 "video" -> Triple(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(MediaStore.Video.Media._ID),
+                    arrayOf(
+                        MediaStore.Video.Media._ID,
+                        MediaStore.Video.Media.DATA
+                    ),
                     "${MediaStore.Video.Media._ID} = ?"
                 )
                 else -> {
@@ -249,6 +252,17 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
                 val contentUri = ContentUris.withAppendedId(uri, mediaId.toLong())
                 
+                // Get file path for video (needed for pre-Q API)
+                val videoPath = if (mediaType == "video" && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    try {
+                        cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA))
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
+                
                 val thumbnail: Bitmap? = try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         context.contentResolver.loadThumbnail(contentUri, Size(320, 320), null)
@@ -260,10 +274,16 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                                 MediaStore.Images.Thumbnails.MINI_KIND,
                                 null
                             )
-                            "video" -> ThumbnailUtils.createVideoThumbnail(
-                                contentUri.toString(),
-                                MediaStore.Video.Thumbnails.MINI_KIND
-                            )
+                            "video" -> {
+                                if (videoPath != null) {
+                                    ThumbnailUtils.createVideoThumbnail(
+                                        videoPath,
+                                        MediaStore.Video.Thumbnails.MINI_KIND
+                                    )
+                                } else {
+                                    null
+                                }
+                            }
                             else -> null
                         }
                     }
@@ -276,10 +296,16 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                             MediaStore.Images.Thumbnails.MINI_KIND,
                             null
                         )
-                        "video" -> ThumbnailUtils.createVideoThumbnail(
-                            contentUri.toString(),
-                            MediaStore.Video.Thumbnails.MINI_KIND
-                        )
+                        "video" -> {
+                            if (videoPath != null) {
+                                ThumbnailUtils.createVideoThumbnail(
+                                    videoPath,
+                                    MediaStore.Video.Thumbnails.MINI_KIND
+                                )
+                            } else {
+                                null
+                            }
+                        }
                         else -> null
                     }
                 }
