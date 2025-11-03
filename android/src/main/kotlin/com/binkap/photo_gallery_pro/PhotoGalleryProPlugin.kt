@@ -12,6 +12,7 @@ import android.os.Build
 import android.graphics.Bitmap
 import android.media.ThumbnailUtils
 import android.util.Size
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -209,6 +210,17 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
         return mediaList
     }
 
+    private fun createVideoThumbnailFromPath(videoPath: String?): Bitmap? {
+        return if (videoPath != null) {
+            ThumbnailUtils.createVideoThumbnail(
+                videoPath,
+                MediaStore.Video.Thumbnails.MINI_KIND
+            )
+        } else {
+            null
+        }
+    }
+
     private fun getThumbnail(mediaId: String, mediaType: String, result: Result) {
         try {
             val (uri, projection, selection) = when (mediaType) {
@@ -257,6 +269,7 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                     try {
                         cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA))
                     } catch (e: Exception) {
+                        Log.w(TAG, "Failed to retrieve video file path: ${e.message}")
                         null
                     }
                 } else {
@@ -274,16 +287,7 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                                 MediaStore.Images.Thumbnails.MINI_KIND,
                                 null
                             )
-                            "video" -> {
-                                if (videoPath != null) {
-                                    ThumbnailUtils.createVideoThumbnail(
-                                        videoPath,
-                                        MediaStore.Video.Thumbnails.MINI_KIND
-                                    )
-                                } else {
-                                    null
-                                }
-                            }
+                            "video" -> createVideoThumbnailFromPath(videoPath)
                             else -> null
                         }
                     }
@@ -296,16 +300,7 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                             MediaStore.Images.Thumbnails.MINI_KIND,
                             null
                         )
-                        "video" -> {
-                            if (videoPath != null) {
-                                ThumbnailUtils.createVideoThumbnail(
-                                    videoPath,
-                                    MediaStore.Video.Thumbnails.MINI_KIND
-                                )
-                            } else {
-                                null
-                            }
-                        }
+                        "video" -> createVideoThumbnailFromPath(videoPath)
                         else -> null
                     }
                 }
@@ -492,6 +487,7 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     override fun onDetachedFromActivityForConfigChanges() {}
 
     companion object {
+        private const val TAG = "PhotoGalleryProPlugin"
         private const val PERMISSION_REQUEST_CODE = 123
     }
 
