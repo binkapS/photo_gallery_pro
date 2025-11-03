@@ -1,3 +1,10 @@
+## 0.0.8
+
+* Fixed video thumbnail generation on Android devices running API < 29 (pre-Android 10)
+  * Changed getThumbnail to use file path instead of content URI for ThumbnailUtils.createVideoThumbnail()
+  * Added proper file path retrieval from MediaStore for video thumbnails
+  * Fixed PlatformException error when generating video thumbnails on older Android versions
+
 ## 0.0.7
 
 * Updated docs
