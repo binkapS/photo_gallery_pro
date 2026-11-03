@@ -147,7 +147,7 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
                 
                 // Get file path
                 var path: String = ""
-                if let fileURL = getAssetLocalURL(asset: asset) {
+                if let fileURL = self.getAssetLocalURL(asset: asset) {
                     path = fileURL.path
                 }
                 media["path"] = path
