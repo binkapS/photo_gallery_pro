@@ -1,5 +1,4 @@
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'src/album.dart';
 import 'src/media.dart';
 import 'src/thumbnail.dart';
