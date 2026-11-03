@@ -3,7 +3,9 @@ package com.binkap.photo_gallery_pro
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlin.test.Test
+import kotlin.test.assertNotSame
 import org.mockito.Mockito
+import java.util.concurrent.atomic.AtomicReference
 
 /*
  * This demonstrates a simple unit test of the Kotlin portion of this plugin's implementation.
@@ -23,5 +25,37 @@ internal class PhotoGalleryProPluginTest {
     plugin.onMethodCall(call, mockResult)
 
     Mockito.verify(mockResult).success("Android " + android.os.Build.VERSION.RELEASE)
+  }
+
+  @Test
+  fun onMethodCall_getThumbnail_runsOnBackgroundThread() {
+    val plugin = PhotoGalleryProPlugin()
+    val callingThread = Thread.currentThread()
+    val resultThread = AtomicReference<Thread>()
+    val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
+
+    Mockito.doAnswer {
+      resultThread.set(Thread.currentThread())
+      null
+    }.`when`(mockResult).error(
+      Mockito.anyString(),
+      Mockito.anyString(),
+      Mockito.isNull()
+    )
+
+    plugin.onMethodCall(
+      MethodCall(
+        "getThumbnail",
+        mapOf("mediaId" to "1", "mediaType" to "unsupported")
+      ),
+      mockResult
+    )
+
+    Mockito.verify(mockResult, Mockito.timeout(1000)).error(
+      Mockito.anyString(),
+      Mockito.anyString(),
+      Mockito.isNull()
+    )
+    assertNotSame(callingThread, resultThread.get())
   }
 }

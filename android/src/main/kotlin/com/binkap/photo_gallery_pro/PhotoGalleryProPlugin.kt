@@ -23,6 +23,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
 
 class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var channel: MethodChannel
@@ -54,7 +55,9 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                 val mediaId = call.argument<String>("mediaId")
                 val mediaType = call.argument<String>("mediaType")
                 if (mediaId != null && mediaType != null) {
-                    getThumbnail(mediaId, mediaType, result)
+                    thumbnailExecutor.execute {
+                        getThumbnail(mediaId, mediaType, result)
+                    }
                 } else {
                     result.error("INVALID_ARGUMENTS", "Media ID and type required", null)
                 }
@@ -63,7 +66,9 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
                 val albumId = call.argument<String>("albumId")
                 val mediaType = call.argument<String>("mediaType")
                 if (albumId != null && mediaType != null) {
-                    getAlbumThumbnail(albumId, mediaType, result)
+                    thumbnailExecutor.execute {
+                        getAlbumThumbnail(albumId, mediaType, result)
+                    }
                 } else {
                     result.error("INVALID_ARGUMENTS", "Album ID and media type required", null)
                 }
@@ -489,6 +494,9 @@ class PhotoGalleryProPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     companion object {
         private const val TAG = "PhotoGalleryProPlugin"
         private const val PERMISSION_REQUEST_CODE = 123
+        private val thumbnailExecutor = Executors.newFixedThreadPool(2) { task ->
+            Thread(task, "photo-gallery-thumbnail").apply { isDaemon = true }
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
