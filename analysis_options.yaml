@@ -1,4 +1,21 @@
 include: package:flutter_lints/flutter.yaml
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - linux/**
+  language:
+    strict-casts: true
+    strict-inference: true
+
+linter:
+  rules:
+    public_member_api_docs: true
+    prefer_final_fields: true
+    prefer_final_locals: true
+    prefer_single_quotes: true
+    unnecessary_import: true
+    use_key_in_widget_constructors: true
+    avoid_print: true

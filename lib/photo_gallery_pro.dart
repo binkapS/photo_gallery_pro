@@ -47,18 +47,12 @@ class PhotoGalleryPro {
   }
 
   /// Generates or fetches a thumbnail for a specific media item
-  Future<Thumbnail> getThumbnail(
-    String mediaId, {
-    MediaType? type,
-  }) async {
+  Future<Thumbnail> getThumbnail(String mediaId, {MediaType? type}) async {
     try {
-      final result = await _channel.invokeMethod(
-        'getThumbnail',
-        {
-          'mediaId': mediaId,
-          if (type != null) 'mediaType': type.toString().split('.').last,
-        },
-      );
+      final result = await _channel.invokeMethod('getThumbnail', {
+        'mediaId': mediaId,
+        if (type != null) 'mediaType': type.toString().split('.').last,
+      });
 
       if (result == null) {
         throw PlatformException(

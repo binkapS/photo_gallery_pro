@@ -4,26 +4,26 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'photo_gallery_pro'
-  s.version          = '0.0.1'
-  s.summary          = 'A new Flutter plugin project.'
+  s.version          = '0.0.9'
+  s.summary          = 'Flutter plugin for accessing photos and videos from the device gallery (Android, iOS, Linux).'
   s.description      = <<-DESC
-A new Flutter plugin project.
+A Flutter plugin that exposes the device media gallery on Android, iOS, and
+Linux through a typed Dart API: albums, media in albums, thumbnails, and
+permissions. Read-only; original bytes are available via getOriginalBytes.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://binkap.com/packages/photo_gallery_pro'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'binkapS' => 'https://github.com/binkapS' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files     = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.platform = :ios, '12.0'
+  s.platform         = :ios, '16.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
-  s.swift_version = '5.0'
+  s.swift_version = '5.9'
 
-  # If your plugin requires a privacy manifest, for example if it uses any
-  # required reason APIs, update the PrivacyInfo.xcprivacy file to describe your
-  # plugin's privacy impact, and then uncomment this line. For more information,
-  # see https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
-  # s.resource_bundles = {'photo_gallery_pro_privacy' => ['Resources/PrivacyInfo.xcprivacy']}
+  # Ships the privacy manifest declaring photo-library access.
+  # See https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
+  s.resource_bundles = {'photo_gallery_pro_privacy' => ['Resources/PrivacyInfo.xcprivacy']}
 end

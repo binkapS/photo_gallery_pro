@@ -7,7 +7,7 @@ class Thumbnail {
 
   Thumbnail({
     required this.data,
-    this.width = 512,  // Default size for backward compatibility
+    this.width = 512, // Default size for backward compatibility
     this.height = 512,
   });
 
@@ -16,7 +16,7 @@ class Thumbnail {
     if (rawData is Uint8List) {
       return Thumbnail(data: rawData);
     }
-    
+
     // Handle Map format (iOS/Linux)
     if (rawData is Map) {
       final map = Map<String, dynamic>.from(rawData);
@@ -24,7 +24,7 @@ class Thumbnail {
       if (data == null || data.isEmpty) {
         throw FormatException('Thumbnail data cannot be empty');
       }
-      
+
       return Thumbnail(
         data: data,
         width: map['width'] as int? ?? 512,
