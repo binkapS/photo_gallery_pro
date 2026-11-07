@@ -5,7 +5,7 @@ import 'package:photo_gallery_pro/photo_gallery_pro_method_channel.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  MethodChannelPhotoGalleryPro platform = MethodChannelPhotoGalleryPro();
+  final MethodChannelPhotoGalleryPro platform = MethodChannelPhotoGalleryPro();
   const MethodChannel channel = MethodChannel('photo_gallery_pro');
 
   setUp(() {

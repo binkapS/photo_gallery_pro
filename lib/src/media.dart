@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:meta/meta.dart';
-import 'package:photo_gallery_pro/src/media_type.dart';
+
+import 'media_type.dart';
 
 /// Base class for media items (images and videos) in the gallery.
 ///
@@ -8,41 +8,86 @@ import 'package:photo_gallery_pro/src/media_type.dart';
 /// types of media files like images and videos.
 @immutable
 abstract class Media {
-  /// Unique identifier for the media item
-  final String id;
-
-  /// Original filename of the media
-  final String name;
-
-  /// Full path to the media file on the device
-  final String path;
-
-  /// DateTime when the media was added to the gallery
-  final DateTime dateAdded;
-
-  /// File size in bytes
-  final int size;
-
-  /// Original width of the media in pixels
-  final int width;
-
-  /// Original height of the media in pixels
-  final int height;
-
-  /// Type of media (image or video)
-  final MediaType type;
-
   /// Creates a new [Media] instance.
   const Media({
     required this.id,
     required this.name,
-    required this.path,
+    required this.uri,
     required this.dateAdded,
     required this.size,
     required this.width,
     required this.height,
     required this.type,
+    this.mimeType,
+    this.dateModified,
+    this.filePath,
+    this.latitude,
+    this.longitude,
   });
+
+  /// Opaque platform identifier.
+  ///
+  /// Android: `MediaStore` `_ID` stringified. iOS: `PHAsset` local
+  /// identifier. Linux: file basename.
+  final String id;
+
+  /// Display filename of the media item.
+  final String name;
+
+  /// Platform-native lookup key.
+  ///
+  /// Android: a `content://media/.../<id>` URI string. iOS: the asset's
+  /// local identifier. Linux: the media id. Use this (not [filePath]) to
+  /// ask the platform for the item's bytes.
+  final String uri;
+
+  /// DateTime when the media was added to the gallery.
+  final DateTime dateAdded;
+
+  /// File size in bytes (`0` when the platform cannot provide it).
+  final int size;
+
+  /// Original width of the media in pixels.
+  final int width;
+
+  /// Original height of the media in pixels.
+  final int height;
+
+  /// Type of media (image or video).
+  final MediaType type;
+
+  /// MIME type of the media (e.g. `image/jpeg`), when known.
+  final String? mimeType;
+
+  /// DateTime of the last modification, when reported by the platform.
+  final DateTime? dateModified;
+
+  /// Local filesystem path, only when the file is actually cached locally.
+  ///
+  /// `null` for cloud-only media (e.g. iCloud) and for scoped-storage
+  /// content URIs on Android 10+. Never assume this is the lookup key —
+  /// use [uri] instead.
+  final String? filePath;
+
+  /// GPS latitude, when the platform exposes it (location permission).
+  final double? latitude;
+
+  /// GPS longitude, when the platform exposes it (location permission).
+  final double? longitude;
+
+  /// Original filename (alias of [name], kept for documentation parity).
+  String get filename => name;
+
+  /// Creation date (alias of [dateAdded], kept for documentation parity).
+  DateTime get created => dateAdded;
+
+  /// Legacy filesystem path.
+  ///
+  /// Deprecated in favor of [uri] (the platform lookup key) and [filePath]
+  /// (the local path when one exists). Returns [filePath] when available,
+  /// otherwise [uri].
+  @Deprecated('Use uri or filePath instead')
+  String get path => filePath ?? uri;
 
   /// Creates a [Media] instance from a JSON map.
   ///
@@ -51,98 +96,266 @@ abstract class Media {
   /// The JSON map should contain:
   /// - id: String identifier
   /// - name: String filename
-  /// - path: String file path
+  /// - uri: String platform lookup key
   /// - dateAdded: int (Unix timestamp in seconds)
   /// - size: int (file size in bytes)
   /// - width: int (pixels)
   /// - height: int (pixels)
-  /// - type: String ('image' or 'video')
+  /// - type: String ('image', 'video', or 'mixed')
+  ///
+  /// Unknown `type` values throw a [FormatException].
   factory Media.fromJson(Map<String, dynamic> json) {
-    final type = json['type'] == 'image' ? MediaType.image : MediaType.video;
+    final typeName = json['type']?.toString();
+    final type =
+        typeName == null ? MediaType.image : MediaTypeX.fromString(typeName);
 
-    if (type == MediaType.image) {
-      return ImageMedia.fromJson(json);
-    } else {
+    if (type == MediaType.video) {
       return VideoMedia.fromJson(json);
     }
+    return ImageMedia.fromJson(json);
   }
+
+  /// Encodes this media item into its canonical platform map shape.
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'id': id,
+    'name': name,
+    'uri': uri,
+    'type': type.name,
+    'dateAdded': dateAdded.millisecondsSinceEpoch ~/ 1000,
+    if (dateModified != null)
+      'dateModified': dateModified!.millisecondsSinceEpoch ~/ 1000,
+    'size': size,
+    'width': width,
+    'height': height,
+    if (mimeType != null) 'mimeType': mimeType,
+    if (filePath != null) 'filePath': filePath,
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Media &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          uri == other.uri &&
+          dateAdded == other.dateAdded &&
+          size == other.size &&
+          width == other.width &&
+          height == other.height &&
+          type == other.type &&
+          mimeType == other.mimeType &&
+          dateModified == other.dateModified &&
+          filePath == other.filePath &&
+          latitude == other.latitude &&
+          longitude == other.longitude;
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    uri,
+    dateAdded,
+    size,
+    width,
+    height,
+    type,
+    mimeType,
+    dateModified,
+    filePath,
+    latitude,
+    longitude,
+  );
 }
+
+/// Shared JSON parsing helpers for [Media] subclasses.
+DateTime _dateFromSeconds(dynamic value) =>
+    DateTime.fromMillisecondsSinceEpoch(((value as num?)?.toInt() ?? 0) * 1000);
+
+/// Parses an optional epoch-seconds timestamp.
+DateTime? _optionalDate(dynamic value) =>
+    value is num
+        ? DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000)
+        : null;
 
 /// Represents an image file in the gallery.
 ///
 /// Contains all properties from [Media] specific to image files.
 class ImageMedia extends Media {
+  /// Creates an [ImageMedia] instance.
   const ImageMedia({
     required super.id,
     required super.name,
-    required super.path,
+    required super.uri,
     required super.dateAdded,
     required super.size,
     required super.width,
     required super.height,
+    super.mimeType,
+    super.dateModified,
+    super.filePath,
+    super.latitude,
+    super.longitude,
   }) : super(type: MediaType.image);
 
   /// Creates an [ImageMedia] instance from a JSON map.
   ///
   /// The JSON map should contain the same fields as [Media.fromJson].
   factory ImageMedia.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ?? '';
     return ImageMedia(
-      id: json['id']?.toString() ?? '',
+      id: id,
       name: json['name']?.toString() ?? '',
-      path: json['path']?.toString() ?? '', // Add path from JSON
-      dateAdded: DateTime.fromMillisecondsSinceEpoch(
-        (json['dateAdded'] as int? ?? 0) * 1000,
-      ),
-      size: json['size'] as int? ?? 0,
-      width: json['width'] as int? ?? 0,
-      height: json['height'] as int? ?? 0,
+      uri: json['uri']?.toString() ?? id,
+      dateAdded: _dateFromSeconds(json['dateAdded']),
+      size: (json['size'] as num?)?.toInt() ?? 0,
+      width: (json['width'] as num?)?.toInt() ?? 0,
+      height: (json['height'] as num?)?.toInt() ?? 0,
+      mimeType: json['mimeType']?.toString(),
+      dateModified: _optionalDate(json['dateModified']),
+      filePath: json['filePath']?.toString() ?? _legacyPath(json),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+    );
+  }
+
+  /// Copies this media item with the given fields replaced.
+  ImageMedia copyWith({
+    String? id,
+    String? name,
+    String? uri,
+    DateTime? dateAdded,
+    int? size,
+    int? width,
+    int? height,
+    String? mimeType,
+    DateTime? dateModified,
+    String? filePath,
+    double? latitude,
+    double? longitude,
+  }) {
+    return ImageMedia(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      uri: uri ?? this.uri,
+      dateAdded: dateAdded ?? this.dateAdded,
+      size: size ?? this.size,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      mimeType: mimeType ?? this.mimeType,
+      dateModified: dateModified ?? this.dateModified,
+      filePath: filePath ?? this.filePath,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 
   @override
-  String toString() => 'ImageMedia(id: $id, name: $name, path: $path)';
+  String toString() => 'ImageMedia(id: $id, name: $name, uri: $uri)';
 }
 
 /// Represents a video file in the gallery.
 ///
-/// Contains all properties from [Media] plus additional video-specific properties
-/// like duration.
+/// Contains all properties from [Media] plus additional video-specific
+/// properties like duration.
 class VideoMedia extends Media {
-  /// Duration of the video
-  final Duration duration;
-
   /// Creates a new [VideoMedia] instance.
   const VideoMedia({
     required super.id,
     required super.name,
-    required super.path,
+    required super.uri,
     required super.dateAdded,
     required super.size,
     required super.width,
     required super.height,
     required this.duration,
+    super.mimeType,
+    super.dateModified,
+    super.filePath,
+    super.latitude,
+    super.longitude,
   }) : super(type: MediaType.video);
+
+  /// Duration of the video.
+  final Duration duration;
 
   /// Creates a [VideoMedia] instance from a JSON map.
   ///
   /// The JSON map should contain the same fields as [Media.fromJson] plus:
   /// - duration: int (duration in milliseconds)
   factory VideoMedia.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ?? '';
     return VideoMedia(
-      id: json['id']?.toString() ?? '',
+      id: id,
       name: json['name']?.toString() ?? '',
-      path: json['path']?.toString() ?? '', // Add path from JSON
-      dateAdded: DateTime.fromMillisecondsSinceEpoch(
-        (json['dateAdded'] as int? ?? 0) * 1000,
+      uri: json['uri']?.toString() ?? id,
+      dateAdded: _dateFromSeconds(json['dateAdded']),
+      size: (json['size'] as num?)?.toInt() ?? 0,
+      width: (json['width'] as num?)?.toInt() ?? 0,
+      height: (json['height'] as num?)?.toInt() ?? 0,
+      duration: Duration(
+        milliseconds: (json['duration'] as num?)?.toInt() ?? 0,
       ),
-      size: json['size'] as int? ?? 0,
-      width: json['width'] as int? ?? 0,
-      height: json['height'] as int? ?? 0,
-      duration: Duration(milliseconds: json['duration'] as int? ?? 0),
+      mimeType: json['mimeType']?.toString(),
+      dateModified: _optionalDate(json['dateModified']),
+      filePath: json['filePath']?.toString() ?? _legacyPath(json),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+    );
+  }
+
+  /// Copies this media item with the given fields replaced.
+  VideoMedia copyWith({
+    String? id,
+    String? name,
+    String? uri,
+    DateTime? dateAdded,
+    int? size,
+    int? width,
+    int? height,
+    Duration? duration,
+    String? mimeType,
+    DateTime? dateModified,
+    String? filePath,
+    double? latitude,
+    double? longitude,
+  }) {
+    return VideoMedia(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      uri: uri ?? this.uri,
+      dateAdded: dateAdded ?? this.dateAdded,
+      size: size ?? this.size,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      duration: duration ?? this.duration,
+      mimeType: mimeType ?? this.mimeType,
+      dateModified: dateModified ?? this.dateModified,
+      filePath: filePath ?? this.filePath,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VideoMedia && super == other && duration == other.duration;
+
+  @override
+  int get hashCode => Object.hash(super.hashCode, duration);
+
+  @override
   String toString() =>
-      'VideoMedia(id: $id, name: $name, path: $path, duration: $duration)';
+      'VideoMedia(id: $id, name: $name, uri: $uri, duration: $duration)';
+}
+
+/// Reads the legacy `path` key as a fallback for [Media.filePath] so that
+/// payloads from platforms that still send `path` (and their `uri`) keep
+/// working during the transition.
+String? _legacyPath(Map<String, dynamic> json) {
+  final path = json['path']?.toString();
+  return (path != null && path.isNotEmpty) ? path : null;
 }

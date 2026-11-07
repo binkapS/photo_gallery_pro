@@ -1,92 +1,146 @@
-import 'package:flutter/services.dart';
-import 'src/album.dart';
-import 'src/media.dart';
-import 'src/thumbnail.dart';
+import 'package:flutter/foundation.dart';
+
 import 'photo_gallery_pro_platform_interface.dart';
-import 'package:photo_gallery_pro/src/media_type.dart';
+import 'src/album.dart';
+import 'src/exceptions.dart';
+import 'src/media.dart';
+import 'src/media_type.dart';
+import 'src/page_request.dart';
+import 'src/permission_status.dart';
+import 'src/thumbnail.dart';
 
 export 'src/album.dart';
+export 'src/exceptions.dart';
 export 'src/media.dart';
-export 'src/thumbnail.dart';
 export 'src/media_type.dart';
+export 'src/page_request.dart';
+export 'src/permission_status.dart';
+export 'src/thumbnail.dart';
+export 'src/thumbnail_cache.dart';
 
+/// The `photo_gallery_pro` plugin facade.
+///
+/// A thin delegate to [PhotoGalleryProPlatform.instance]; it never talks to
+/// a `MethodChannel` directly, so tests can substitute a fake platform.
+///
+/// ```dart
+/// final gallery = PhotoGalleryPro();
+///
+/// final status = await gallery.getPermissionStatus();
+/// if (!status.canReadMedia) {
+///   await gallery.requestPermission();
+/// }
+///
+/// final albums = await gallery.getAlbums(type: MediaType.mixed);
+/// final media = await gallery.getMediaInAlbum(
+///   albums.first.id,
+///   type: MediaType.mixed,
+///   page: PageRequest(limit: 100),
+/// );
+/// final thumb = await gallery.getThumbnail(
+///   media.first.id,
+///   size: const ThumbnailSize.square(256),
+/// );
+/// ```
+///
+/// Failures surface as typed [PhotoGalleryException]s (see `src/exceptions.dart`).
 class PhotoGalleryPro {
-  static const MethodChannel _channel = MethodChannel('photo_gallery_pro');
+  /// Returns a display/debug string for the platform version, if available.
+  Future<String?> getPlatformVersion() =>
+      PhotoGalleryProPlatform.instance.getPlatformVersion();
 
-  Future<String?> getPlatformVersion() {
-    return PhotoGalleryProPlatform.instance.getPlatformVersion();
-  }
+  /// Fetches all albums from the device gallery.
+  ///
+  /// When [type] is `null`, albums of every kind are returned (equivalent
+  /// to [MediaType.mixed]). [page] windows the result set.
+  Future<List<Album>> getAlbums({MediaType? type, PageRequest? page}) =>
+      PhotoGalleryProPlatform.instance.getAlbums(type: type, page: page);
 
-  /// Fetches all albums from the device
-  Future<List<Album>> getAlbums({MediaType? type}) async {
-    final List<dynamic> albums = await _channel.invokeMethod(
-      'getAlbums',
-      type != null ? {'mediaType': type.toString().split('.').last} : null,
-    );
-
-    return albums
-        .cast<Map<dynamic, dynamic>>()
-        .map((map) => Album.fromJson(Map<String, dynamic>.from(map)))
-        .toList();
-  }
-
-  /// Fetches media files from a specific album
+  /// Fetches media files in the album identified by [albumId].
+  ///
+  /// [type] defaults to [MediaType.mixed] so mixed albums enumerate in a
+  /// single call. Results are sorted per [sort] (newest first by default)
+  /// and windowed by [page].
   Future<List<Media>> getMediaInAlbum(
     String albumId, {
-    MediaType type = MediaType.image,
-  }) async {
-    final List<dynamic> mediaFiles = await _channel.invokeMethod(
-      'getMediaInAlbum',
-      {'albumId': albumId, 'mediaType': type.toString().split('.').last},
-    );
+    MediaType type = MediaType.mixed,
+    PageRequest? page,
+    MediaSort sort = MediaSort.dateAddedDesc,
+  }) => PhotoGalleryProPlatform.instance.getMediaInAlbum(
+    albumId,
+    type: type,
+    page: page,
+    sort: sort,
+  );
 
-    return mediaFiles
-        .cast<Map<dynamic, dynamic>>()
-        .map((map) => Media.fromJson(Map<String, dynamic>.from(map)))
-        .toList();
+  /// Fetches a thumbnail for the media item identified by [mediaId].
+  ///
+  /// [size] controls the requested pixel dimensions (default 512×512);
+  /// [format] selects JPEG or PNG encoding. [type] may be provided when the
+  /// platform needs it to locate the media; otherwise it is inferred.
+  Future<Thumbnail> getThumbnail(
+    String mediaId, {
+    ThumbnailSize size = const ThumbnailSize.square(512),
+    ThumbnailFormat format = ThumbnailFormat.jpeg,
+    MediaType? type,
+  }) {
+    return PhotoGalleryProPlatform.instance
+        .getThumbnail(mediaId, size: size, format: format, type: type)
+        .catchError((Object error) {
+          if (kDebugMode) {
+            debugPrint('Error getting thumbnail: $error');
+          }
+          throw error;
+        });
   }
 
-  /// Generates or fetches a thumbnail for a specific media item
-  Future<Thumbnail> getThumbnail(String mediaId, {MediaType? type}) async {
-    try {
-      final result = await _channel.invokeMethod('getThumbnail', {
-        'mediaId': mediaId,
-        if (type != null) 'mediaType': type.toString().split('.').last,
-      });
-
-      if (result == null) {
-        throw PlatformException(
-          code: 'NULL_RESULT',
-          message: 'Thumbnail generation failed',
-        );
-      }
-
-      return Thumbnail.fromPlatformData(result);
-    } catch (e) {
-      print('Error getting thumbnail: $e');
-      rethrow;
-    }
-  }
-
-  /// Fetches the album thumbnail for the given album ID.
+  /// Fetches the representative (most recent) thumbnail for an album.
   Future<Thumbnail> getAlbumThumbnail(
     String albumId, {
-    MediaType type = MediaType.image,
-  }) async {
-    final dynamic thumbnailData = await _channel.invokeMethod(
-      'getAlbumThumbnail',
-      {'albumId': albumId, 'mediaType': type.toString().split('.').last},
-    );
-    return Thumbnail.fromPlatformData(thumbnailData);
-  }
+    MediaType type = MediaType.mixed,
+    ThumbnailSize size = const ThumbnailSize.square(512),
+    ThumbnailFormat format = ThumbnailFormat.jpeg,
+  }) => PhotoGalleryProPlatform.instance.getAlbumThumbnail(
+    albumId,
+    type: type,
+    size: size,
+    format: format,
+  );
 
-  /// Checks if the app has required permissions
-  Future<bool> hasPermission() async {
-    return await _channel.invokeMethod('hasPermission') ?? false;
-  }
+  /// Fetches thumbnails for several media items in one call.
+  ///
+  /// Per-item failures (e.g. a file that vanished) are simply absent from
+  /// the returned map; they do not fail the whole batch.
+  Future<Map<String, Thumbnail>> getThumbnailBatch(
+    List<String> mediaIds, {
+    ThumbnailSize size = const ThumbnailSize.square(256),
+    ThumbnailFormat format = ThumbnailFormat.jpeg,
+  }) => PhotoGalleryProPlatform.instance.getThumbnailBatch(
+    mediaIds,
+    size: size,
+    format: format,
+  );
 
-  /// Requests required permissions
-  Future<bool> requestPermission() async {
-    return await _channel.invokeMethod('requestPermission') ?? false;
-  }
+  /// Loads the original (full-resolution) bytes of a media item.
+  ///
+  /// May trigger a cloud download (e.g. iCloud); call only from a
+  /// user-initiated action and warn about the data budget.
+  Future<Uint8List> getOriginalBytes(String mediaId) =>
+      PhotoGalleryProPlatform.instance.getOriginalBytes(mediaId);
+
+  /// Returns the current gallery [PermissionStatus].
+  Future<PermissionStatus> getPermissionStatus() =>
+      PhotoGalleryProPlatform.instance.getPermissionStatus();
+
+  /// Shows the system permission prompt and returns the resulting status.
+  ///
+  /// This completes only after the system dialog resolves. Note the
+  /// breaking change from `0.0.x`: this used to return `bool`; see
+  /// `MIGRATION.md`.
+  Future<PermissionStatus> requestPermission() =>
+      PhotoGalleryProPlatform.instance.requestPermission();
+
+  /// Whether the gallery can be read (granted or limited access).
+  Future<bool> hasPermission() =>
+      PhotoGalleryProPlatform.instance.hasPermission();
 }

@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'photo_gallery_pro'
-  s.version          = '0.0.9'
+  s.version          = '0.1.0'
   s.summary          = 'Flutter plugin for accessing photos and videos from the device gallery (Android, iOS, Linux).'
   s.description      = <<-DESC
 A Flutter plugin that exposes the device media gallery on Android, iOS, and
