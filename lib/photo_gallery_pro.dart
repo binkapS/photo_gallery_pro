@@ -4,6 +4,7 @@ import 'photo_gallery_pro_platform_interface.dart';
 import 'src/album.dart';
 import 'src/exceptions.dart';
 import 'src/media.dart';
+import 'src/media_query.dart';
 import 'src/media_type.dart';
 import 'src/page_request.dart';
 import 'src/permission_status.dart';
@@ -12,6 +13,7 @@ import 'src/thumbnail.dart';
 export 'src/album.dart';
 export 'src/exceptions.dart';
 export 'src/media.dart';
+export 'src/media_query.dart';
 export 'src/media_type.dart';
 export 'src/page_request.dart';
 export 'src/permission_status.dart';
@@ -143,4 +145,34 @@ class PhotoGalleryPro {
   /// Whether the gallery can be read (granted or limited access).
   Future<bool> hasPermission() =>
       PhotoGalleryProPlatform.instance.hasPermission();
+
+  /// Finds an album by its platform [id], or `null` if it no longer exists.
+  Future<Album?> getAlbumById(String albumId) async {
+    final List<Album> albums = await getAlbums();
+    for (final Album album in albums) {
+      if (album.id == albumId) return album;
+    }
+    return null;
+  }
+
+  /// Searches media in an album using a [MediaQuery] filter.
+  ///
+  /// This applies the requested [MediaType] and [sort] natively, then
+  /// filters the result with [query] in Dart. For small galleries this
+  /// avoids a native search API; native push-down can replace it later.
+  Future<List<Media>> searchMedia(
+    String albumId,
+    MediaQuery query, {
+    MediaType type = MediaType.mixed,
+    PageRequest? page,
+    MediaSort sort = MediaSort.dateAddedDesc,
+  }) async {
+    final List<Media> media = await getMediaInAlbum(
+      albumId,
+      type: type,
+      page: page,
+      sort: sort,
+    );
+    return media.where(query.matches).toList();
+  }
 }
