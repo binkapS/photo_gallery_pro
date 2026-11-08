@@ -162,7 +162,8 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
             PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: nil),
         ]
 
-        for collections in albumCollections {
+        for (index, collections) in albumCollections.enumerated() {
+            let isSmart = index == 1
             collections.enumerateObjects { album, _, _ in
                 guard album.assetCollectionSubtype != .any else { return }
 
@@ -212,6 +213,7 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
                     "name": album.localizedTitle ?? "Unknown",
                     "count": total,
                     "type": albumType,
+                    "isSmart": isSmart,
                 ]
                 if let thumb = thumbnailAsset {
                     entry["thumbnailMediaId"] = thumb.localIdentifier
@@ -281,12 +283,10 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
             } else {
                 mimeType = ""
             }
-            let size: Int
-            if let first = firstResource, let fileSize = first.value(forKey: "fileSize") as? NSNumber {
-                size = fileSize.intValue
-            } else {
-                size = 0
-            }
+            // PHAssetResource exposes no public file-size API; report 0
+            // (unknown) instead of relying on KVC, which can break across
+            // OS releases. Callers needing exact bytes use getOriginalBytes.
+            let size = 0
             let dateAdded = Int(asset.creationDate?.timeIntervalSince1970 ?? 0)
             let dateModified = Int(asset.modificationDate?.timeIntervalSince1970 ?? asset.creationDate?.timeIntervalSince1970 ?? 0)
             var media: [String: Any] = [

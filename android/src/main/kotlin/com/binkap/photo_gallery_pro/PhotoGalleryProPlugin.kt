@@ -120,7 +120,7 @@ class PhotoGalleryProPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, R
                             // Per spec: omit failures from the result map.
                         }
                     }
-                    result.success(out)
+                    postToMain { result.success(out) }
                 }
             }
             "getOriginalBytes" -> {
@@ -129,13 +129,13 @@ class PhotoGalleryProPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, R
                     thumbnailExecutor.execute {
                         try {
                             val bytes = readOriginalBytes(mediaId)
-                            result.success(bytes)
+                            postToMain { result.success(bytes) }
                         } catch (e: NotFoundException) {
-                            result.error("NOT_FOUND", e.message, null)
+                            postToMain { result.error("NOT_FOUND", e.message, null) }
                         } catch (e: InvalidTypeException) {
-                            result.error("INVALID_TYPE", e.message, null)
+                            postToMain { result.error("INVALID_TYPE", e.message, null) }
                         } catch (e: Exception) {
-                            result.error("READ_ERROR", "Error reading original bytes: ${e.message}", e.stackTraceToString())
+                            postToMain { result.error("READ_ERROR", "Error reading original bytes: ${e.message}", e.stackTraceToString()) }
                         }
                     }
                 } else {
@@ -460,13 +460,13 @@ class PhotoGalleryProPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, R
     ) {
         try {
             val map = createThumbnailMap(mediaId, width, height, formatRaw, mediaTypeHint)
-            result.success(map)
+            postToMain { result.success(map) }
         } catch (e: NotFoundException) {
-            result.error("NOT_FOUND", e.message, null)
+            postToMain { result.error("NOT_FOUND", e.message, null) }
         } catch (e: InvalidTypeException) {
-            result.error("INVALID_TYPE", e.message, null)
+            postToMain { result.error("INVALID_TYPE", e.message, null) }
         } catch (e: Exception) {
-            result.error("THUMBNAIL_ERROR", "Error generating thumbnail: ${e.message}", e.stackTraceToString())
+            postToMain { result.error("THUMBNAIL_ERROR", "Error generating thumbnail: ${e.message}", e.stackTraceToString()) }
         }
     }
 
@@ -625,22 +625,22 @@ class PhotoGalleryProPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, R
         try {
             val normalized = normalizeType(mediaTypeRaw) ?: "mixed"
             if (normalized !in setOf("image", "video", "mixed")) {
-                result.error("INVALID_TYPE", "Invalid media type: $mediaTypeRaw", null)
+                postToMain { result.error("INVALID_TYPE", "Invalid media type: $mediaTypeRaw", null) }
                 return
             }
             val newest = findNewestInAlbum(albumId, normalized)
             if (newest == null) {
-                result.error("ALBUM_THUMBNAIL_ERROR", "No media found in album: $albumId", null)
+                postToMain { result.error("ALBUM_THUMBNAIL_ERROR", "No media found in album: $albumId", null) }
                 return
             }
             val map = createThumbnailMap(newest.first, width, height, formatRaw, if (newest.second) "video" else "image")
-            result.success(map)
+            postToMain { result.success(map) }
         } catch (e: NotFoundException) {
-            result.error("NOT_FOUND", e.message, null)
+            postToMain { result.error("NOT_FOUND", e.message, null) }
         } catch (e: InvalidTypeException) {
-            result.error("INVALID_TYPE", e.message, null)
+            postToMain { result.error("INVALID_TYPE", e.message, null) }
         } catch (e: Exception) {
-            result.error("ALBUM_THUMBNAIL_ERROR", "Error getting album thumbnail: ${e.message}", e.stackTraceToString())
+            postToMain { result.error("ALBUM_THUMBNAIL_ERROR", "Error getting album thumbnail: ${e.message}", e.stackTraceToString()) }
         }
     }
 

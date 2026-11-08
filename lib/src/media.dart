@@ -20,6 +20,7 @@ abstract class Media {
     required this.type,
     this.mimeType,
     this.dateModified,
+    this.dateCreated,
     this.filePath,
     this.latitude,
     this.longitude,
@@ -62,6 +63,11 @@ abstract class Media {
   /// DateTime of the last modification, when reported by the platform.
   final DateTime? dateModified;
 
+  /// DateTime the media was originally created (e.g. EXIF capture date),
+  /// when reported by the platform. Falls back to [dateAdded] via [created]
+  /// when unknown.
+  final DateTime? dateCreated;
+
   /// Local filesystem path, only when the file is actually cached locally.
   ///
   /// `null` for cloud-only media (e.g. iCloud) and for scoped-storage
@@ -78,8 +84,8 @@ abstract class Media {
   /// Original filename (alias of [name], kept for documentation parity).
   String get filename => name;
 
-  /// Creation date (alias of [dateAdded], kept for documentation parity).
-  DateTime get created => dateAdded;
+  /// Creation date: [dateCreated] when known, otherwise [dateAdded].
+  DateTime get created => dateCreated ?? dateAdded;
 
   /// Legacy filesystem path.
   ///
@@ -106,9 +112,15 @@ abstract class Media {
   /// Unknown `type` values throw a [FormatException].
   factory Media.fromJson(Map<String, dynamic> json) {
     final typeName = json['type']?.toString();
-    final type =
-        typeName == null ? MediaType.image : MediaTypeX.fromString(typeName);
-
+    if (typeName == null) {
+      throw const FormatException('Media payload is missing "type"');
+    }
+    final type = MediaTypeX.fromString(typeName);
+    if (type == MediaType.mixed) {
+      throw const FormatException(
+        'A single media item cannot have type "mixed"',
+      );
+    }
     if (type == MediaType.video) {
       return VideoMedia.fromJson(json);
     }
@@ -124,6 +136,8 @@ abstract class Media {
     'dateAdded': dateAdded.millisecondsSinceEpoch ~/ 1000,
     if (dateModified != null)
       'dateModified': dateModified!.millisecondsSinceEpoch ~/ 1000,
+    if (dateCreated != null)
+      'dateCreated': dateCreated!.millisecondsSinceEpoch ~/ 1000,
     'size': size,
     'width': width,
     'height': height,
@@ -148,6 +162,7 @@ abstract class Media {
           type == other.type &&
           mimeType == other.mimeType &&
           dateModified == other.dateModified &&
+          dateCreated == other.dateCreated &&
           filePath == other.filePath &&
           latitude == other.latitude &&
           longitude == other.longitude;
@@ -164,6 +179,7 @@ abstract class Media {
     type,
     mimeType,
     dateModified,
+    dateCreated,
     filePath,
     latitude,
     longitude,
@@ -195,6 +211,7 @@ class ImageMedia extends Media {
     required super.height,
     super.mimeType,
     super.dateModified,
+    super.dateCreated,
     super.filePath,
     super.latitude,
     super.longitude,
@@ -215,6 +232,7 @@ class ImageMedia extends Media {
       height: (json['height'] as num?)?.toInt() ?? 0,
       mimeType: json['mimeType']?.toString(),
       dateModified: _optionalDate(json['dateModified']),
+      dateCreated: _optionalDate(json['dateCreated']),
       filePath: json['filePath']?.toString() ?? _legacyPath(json),
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
@@ -232,6 +250,7 @@ class ImageMedia extends Media {
     int? height,
     String? mimeType,
     DateTime? dateModified,
+    DateTime? dateCreated,
     String? filePath,
     double? latitude,
     double? longitude,
@@ -246,6 +265,7 @@ class ImageMedia extends Media {
       height: height ?? this.height,
       mimeType: mimeType ?? this.mimeType,
       dateModified: dateModified ?? this.dateModified,
+      dateCreated: dateCreated ?? this.dateCreated,
       filePath: filePath ?? this.filePath,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
@@ -273,6 +293,7 @@ class VideoMedia extends Media {
     required this.duration,
     super.mimeType,
     super.dateModified,
+    super.dateCreated,
     super.filePath,
     super.latitude,
     super.longitude,
@@ -300,6 +321,7 @@ class VideoMedia extends Media {
       ),
       mimeType: json['mimeType']?.toString(),
       dateModified: _optionalDate(json['dateModified']),
+      dateCreated: _optionalDate(json['dateCreated']),
       filePath: json['filePath']?.toString() ?? _legacyPath(json),
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
@@ -318,6 +340,7 @@ class VideoMedia extends Media {
     Duration? duration,
     String? mimeType,
     DateTime? dateModified,
+    DateTime? dateCreated,
     String? filePath,
     double? latitude,
     double? longitude,
@@ -333,6 +356,7 @@ class VideoMedia extends Media {
       duration: duration ?? this.duration,
       mimeType: mimeType ?? this.mimeType,
       dateModified: dateModified ?? this.dateModified,
+      dateCreated: dateCreated ?? this.dateCreated,
       filePath: filePath ?? this.filePath,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
@@ -346,6 +370,12 @@ class VideoMedia extends Media {
 
   @override
   int get hashCode => Object.hash(super.hashCode, duration);
+
+  @override
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    ...super.toJson(),
+    'duration': duration.inMilliseconds,
+  };
 
   @override
   String toString() =>

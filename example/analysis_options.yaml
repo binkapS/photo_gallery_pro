@@ -12,7 +12,7 @@ analyzer:
 
 linter:
   rules:
-    public_member_api_docs: false
+    public_member_api_docs: true
     prefer_final_fields: true
     prefer_single_quotes: true
     use_key_in_widget_constructors: true

@@ -127,6 +127,12 @@ static gchar* resolve_album_dir(const gchar* album_id) {
   const gchar* pictures_dir =
       g_get_user_special_dir(G_USER_DIRECTORY_PICTURES);
   if (pictures_dir == NULL) return NULL;
+  // The Pictures root itself is exposed as an album named after the
+  // directory's basename (e.g. "Pictures") so loose files are visible.
+  g_autofree gchar* root_name = g_path_get_basename(pictures_dir);
+  if (g_strcmp0(album_id, root_name) == 0) {
+    return g_strdup(pictures_dir);
+  }
   return g_build_filename(pictures_dir, album_id, NULL);
 }
 
@@ -348,6 +354,48 @@ static FlMethodResponse* get_albums(FlMethodCall* method_call) {
     // the previous behavior.
     g_autoptr(FlValue) empty = fl_value_new_list();
     return FL_METHOD_RESPONSE(fl_method_success_response_new(empty));
+  }
+
+  // The Pictures root itself is an album (named after its basename) so
+  // loose files directly in ~/Pictures are not invisible.
+  {
+    AlbumContents root;
+    memset(&root, 0, sizeof(root));
+    scan_album_dir(pictures_dir, &root);
+    const gchar* root_type = NULL;
+    if (root.images > 0 && root.videos > 0) {
+      root_type = "mixed";
+    } else if (root.images > 0) {
+      root_type = "image";
+    } else if (root.videos > 0) {
+      root_type = "video";
+    }
+    gint root_count = want_image ? root.images : want_video ? root.videos
+                                      : root.images + root.videos;
+    if (root_type != NULL && root_count > 0) {
+      g_autofree gchar* root_name = g_path_get_basename(pictures_dir);
+      g_autoptr(FlValue) album = fl_value_new_map();
+      fl_value_set(album, fl_value_new_string("id"),
+                   fl_value_new_string(root_name));
+      fl_value_set(album, fl_value_new_string("name"),
+                   fl_value_new_string(root_name));
+      fl_value_set(album, fl_value_new_string("count"),
+                   fl_value_new_int(root_count));
+      fl_value_set(album, fl_value_new_string("type"),
+                   fl_value_new_string(root_type));
+      fl_value_set(album, fl_value_new_string("path"),
+                   fl_value_new_string(pictures_dir));
+      if (root.newest_basename != NULL) {
+        fl_value_set(album, fl_value_new_string("thumbnailMediaId"),
+                     fl_value_new_string(root.newest_basename));
+      }
+      if (root.last_modified_sec > 0) {
+        fl_value_set(album, fl_value_new_string("lastModified"),
+                     fl_value_new_int(root.last_modified_sec));
+      }
+      fl_value_append(collected, album);
+    }
+    g_free(root.newest_basename);
   }
 
   struct dirent* entry;

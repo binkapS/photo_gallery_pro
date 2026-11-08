@@ -19,8 +19,9 @@ enum MediaSort {
 
 /// A page window into a larger result set.
 ///
-/// Both `offset` and `limit` are forwarded to the platform so that large
-/// galleries never need to be fully materialized.
+/// Both `offset` and `limit` are forwarded to the platform; platforms
+/// apply the window as close to the query as they can (some may still
+/// materialize and slice in memory on very large galleries).
 ///
 /// ```dart
 /// final firstPage = await gallery.getMediaInAlbum(

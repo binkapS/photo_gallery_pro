@@ -1,10 +1,10 @@
 # `photo_gallery_pro` — Comprehensive Improvement Plan
 
-> **Document type:** Roadmap / Technical Improvement Plan
+> **Document type:** Roadmap / Technical Improvement Plan (historical — see status below)
 > **Project:** `photo_gallery_pro` (Flutter federated plugin: Dart ↔ Android/Kotlin, iOS/Swift, Linux/GTK+ C)
-> **Current version in `pubspec.yaml`:** `0.0.8`
-> **Status:** Draft for maintainer review
-> **Date:** 2026-11-08
+> **Current version in `pubspec.yaml`:** `1.1.0`
+> **Status:** ✅ **Implemented.** All phases (0–8) shipped in `1.0.0`; verification findings were fixed in `1.1.0`. See [`VERIFICATION.md`](VERIFICATION.md) for the audit and the per-item fix list. This document is kept as the design record; the "Current-State Inventory" (§2) and findings (§3–§5) describe the pre-plan `0.0.8` state, not the current code.
+> **Date:** 2026-11-08 (plan) · 2026-11-08 (verified + fixed in `1.1.0`)
 > **Scope:** API correctness, platform parity, performance, security/privacy, testing, CI, docs & pub.dev readiness, example app, and new features
 
 ---
@@ -32,6 +32,25 @@
 19. [Appendix A — Target API Sketch](#appendix-a--target-api-sketch)
 20. [Appendix B — Method-Channel Contract](#appendix-b--method-channel-contract)
 21. [Appendix C — Per-File Change Checklist](#appendix-c--per-file-change-checklist)
+
+---
+
+## Implementation status (added 2026-11-08)
+
+| Phase | Commit | Version | Status |
+|-------|--------|---------|--------|
+| 0 — Foundations | `947c0d8` | 0.0.9 | ✅ Done |
+| 1 — Dart contract | `bb0cfd9` | 0.1.0 | ✅ Done |
+| 2 — Android | `6fac664` | — | ✅ Done |
+| 3 — iOS | `9606b13` | — | ✅ Done |
+| 4 — Linux | `f7549d8` | — | ✅ Done |
+| 5 — Features | `8b3cc4a` | 0.2.0 | ✅ Done (P2/P3 deferred by design) |
+| 6 — Testing & CI | `33ffd90` | — | ✅ Done |
+| 7 — Example | `0308631` | — | ✅ Done |
+| 8 — Docs & 1.0 | `32c6d9d` | 1.0.0 | ✅ Done |
+| Verification fixes | *(this change)* | 1.1.0 | ✅ Done — see `VERIFICATION.md` §3 (Fixed) |
+
+Deferred to a future release (see `VERIFICATION.md` §3): `observeChanges` streams, media mutation, macOS/Windows/web, native push-down pagination (Android `LIMIT` / iOS `fetchLimit`), Linux native unit tests, iOS native test target.
 
 ---
 
@@ -682,14 +701,14 @@ Channel: `photo_gallery_pro` (`StandardMethodCodec`). All args are `String`/`int
 
 | Method | Args | Returns | Errors |
 |--------|------|---------|--------|
-| `getAlbums` | `{mediaType?: string, offset?: int, limit?: int}` | `List<{id,name,count,type,thumbnailMediaId?}>` | `INVALID_TYPE`, `PERMISSION_ERROR`, `ALBUMS_ERROR` |
+| `getAlbums` | `{mediaType?: string, offset?: int, limit?: int}` | `List<{id,name,count,type,thumbnailMediaId?,isSmart?}>` | `INVALID_TYPE`, `PERMISSION_ERROR`, `ALBUMS_ERROR` |
 | `getMediaInAlbum` | `{albumId: string, mediaType: string, offset?: int, limit?: int, sort?: string}` | `List<{id,uri,name,mimeType,type,dateAdded,dateModified,size,width,height,duration?,path?}>` | `INVALID_ARGUMENTS`, `PERMISSION_ERROR`, `FETCH_ERROR` |
 | `getThumbnail` | `{mediaId: string, width?: int, height?: int, format?: string}` | `{data: Uint8List, width: int, height: int, format: string}` (always a map; Android joins the current byte path behind a map) | `INVALID_ARGUMENTS`, `NOT_FOUND`, `THUMBNAIL_ERROR` |
 | `getAlbumThumbnail` | `{albumId: string, mediaType: string, width?: int, height?: int}` | same as `getThumbnail` | `INVALID_ARGUMENTS`, `ALBUM_ERROR`, `THUMBNAIL_ERROR` |
 | `getThumbnailBatch` | `{mediaIds: List<string>, width?: int, height?: int}` | `Map<string, {data,width,height,format}>` | per-id `NOT_FOUND` entries do not fail the whole batch |
 | `getOriginalBytes` | `{mediaId: string}` | `Uint8List` | `NOT_FOUND`, `ICLOUD_NOT_DOWNLOADED` |
-| `hasPermission` | `{}` | `bool` (deprecated; maps to `getPermissionStatus`) | — |
-| `requestPermission` | `{}` | `bool` (deprecated) | — |
+| `hasPermission` | `{}` | `bool` (derived from `getPermissionStatus().canReadMedia`) | — |
+| `requestPermission` | `{}` | `string` status (`granted/limited/denied/...`) — Dart `Future<PermissionStatus>` | — |
 | `getPermissionStatus` | `{}` | `string: granted\|limited\|denied\|restricted\|notDetermined` | — |
 | `getPlatformVersion` | `{}` | `string` (display/debug only) | — |
 

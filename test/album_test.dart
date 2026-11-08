@@ -46,6 +46,18 @@ void main() {
       expect(album.type, MediaType.mixed);
     });
 
+    test('parses isSmart flag and round-trips it', () {
+      final Album album = Album.fromJson(<String, dynamic>{
+        'id': '1',
+        'name': 'Camera Roll',
+        'type': 'mixed',
+        'isSmart': true,
+      });
+      expect(album.isSmart, isTrue);
+      expect(Album.fromJson(album.toJson()).isSmart, isTrue);
+      expect(Album.fromJson(<String, dynamic>{'id': '1'}).isSmart, isFalse);
+    });
+
     test('value equality and copyWith', () {
       const Album a = Album(
         id: '1',

@@ -7,6 +7,7 @@ void main() {
   runApp(const MyApp());
 }
 
+/// The demo application.
 class MyApp extends StatelessWidget {
   /// Creates the demo app.
   const MyApp({super.key});
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// The demo home page (album grid / media grid).
 class HomePage extends StatefulWidget {
   /// Creates the demo home page.
   const HomePage({super.key});
@@ -149,13 +151,40 @@ class _HomePageState extends State<HomePage> {
     if (_error != null) {
       return _buildMessage(
         message: _error!,
-        action: ElevatedButton(
-          onPressed: _initGallery,
-          child: const Text('Retry'),
+        action: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(onPressed: _initGallery, child: const Text('Retry')),
+            const SizedBox(width: 12),
+            OutlinedButton(
+              onPressed: () => _showSettingsHint(context),
+              child: const Text('Open Settings'),
+            ),
+          ],
         ),
       );
     }
     return _selectedAlbum == null ? _buildAlbumView() : _buildMediaView();
+  }
+
+  void _showSettingsHint(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Open app settings'),
+            content: const Text(
+              'Open your device Settings → Apps → Photo Gallery Pro Demo → '
+              'Permissions, then grant photo access.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   Widget _buildMessage({required String message, Widget? action}) {
@@ -244,34 +273,39 @@ class _HomePageState extends State<HomePage> {
     if (_mediaFiles.isEmpty) {
       return _buildMessage(message: 'This album is empty');
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(2),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1,
-        crossAxisSpacing: 2,
-        mainAxisSpacing: 2,
-      ),
-      itemCount: _mediaFiles.length,
-      itemBuilder: (context, index) {
-        final Media media = _mediaFiles[index];
-        return MediaThumb(
-          media: media,
-          gallery: _gallery,
-          cache: _cache,
-          onTap:
-              () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder:
-                      (_) => PhotoViewer(
-                        media: media,
-                        gallery: _gallery,
-                        cache: _cache,
-                      ),
-                ),
-              ),
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        if (_selectedAlbum != null) await _loadAlbumMedia(_selectedAlbum!);
       },
+      child: GridView.builder(
+        padding: const EdgeInsets.all(2),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 1,
+          crossAxisSpacing: 2,
+          mainAxisSpacing: 2,
+        ),
+        itemCount: _mediaFiles.length,
+        itemBuilder: (context, index) {
+          final Media media = _mediaFiles[index];
+          return MediaThumb(
+            media: media,
+            gallery: _gallery,
+            cache: _cache,
+            onTap:
+                () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder:
+                        (_) => PhotoViewer(
+                          media: media,
+                          gallery: _gallery,
+                          cache: _cache,
+                        ),
+                  ),
+                ),
+          );
+        },
+      ),
     );
   }
 }
@@ -475,7 +509,7 @@ class _MediaThumbState extends State<MediaThumb> {
 
 /// Detail screen showing the media's metadata fields (uri, filePath, size,
 /// duration, mimeType) — proving the new fields are wired end to end.
-class PhotoViewer extends StatelessWidget {
+class PhotoViewer extends StatefulWidget {
   /// Creates a [PhotoViewer].
   const PhotoViewer({
     super.key,
@@ -494,8 +528,28 @@ class PhotoViewer extends StatelessWidget {
   final ThumbnailCache cache;
 
   @override
+  State<PhotoViewer> createState() => _PhotoViewerState();
+}
+
+class _PhotoViewerState extends State<PhotoViewer> {
+  Future<Thumbnail>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.cache.getOrLoad(
+      widget.media.id,
+      () => widget.gallery.getThumbnail(
+        widget.media.id,
+        size: const ThumbnailSize.square(1024),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final VideoMedia? video = media is VideoMedia ? media as VideoMedia : null;
+    final Media media = widget.media;
+    final VideoMedia? video = media is VideoMedia ? media : null;
     return Scaffold(
       appBar: AppBar(title: Text(media.name)),
       body: ListView(
@@ -504,13 +558,7 @@ class PhotoViewer extends StatelessWidget {
           AspectRatio(
             aspectRatio: 1,
             child: FutureBuilder<Thumbnail>(
-              future: cache.getOrLoad(
-                media.id,
-                () => gallery.getThumbnail(
-                  media.id,
-                  size: const ThumbnailSize.square(1024),
-                ),
-              ),
+              future: _future,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());

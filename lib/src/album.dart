@@ -12,6 +12,7 @@ class Album {
     required this.count,
     required this.type,
     this.thumbnailMediaId,
+    this.isSmart = false,
     this.path,
     this.lastModified,
   });
@@ -36,6 +37,9 @@ class Album {
   /// platform provided one.
   final String? thumbnailMediaId;
 
+  /// Whether this is a platform smart album (e.g. Camera Roll, Screenshots).
+  final bool isSmart;
+
   /// Filesystem path of the album directory (Linux only; `null` elsewhere).
   final String? path;
 
@@ -55,6 +59,7 @@ class Album {
       type:
           typeName == null ? MediaType.mixed : MediaTypeX.fromString(typeName),
       thumbnailMediaId: json['thumbnailMediaId']?.toString(),
+      isSmart: json['isSmart'] == true,
       path: json['path']?.toString(),
       lastModified:
           lastModifiedRaw is num
@@ -72,6 +77,7 @@ class Album {
     'count': count,
     'type': type.name,
     if (thumbnailMediaId != null) 'thumbnailMediaId': thumbnailMediaId,
+    if (isSmart) 'isSmart': true,
     if (path != null) 'path': path,
     if (lastModified != null)
       'lastModified': lastModified!.millisecondsSinceEpoch ~/ 1000,
@@ -84,6 +90,7 @@ class Album {
     int? count,
     MediaType? type,
     String? thumbnailMediaId,
+    bool? isSmart,
     String? path,
     DateTime? lastModified,
   }) {
@@ -93,6 +100,7 @@ class Album {
       count: count ?? this.count,
       type: type ?? this.type,
       thumbnailMediaId: thumbnailMediaId ?? this.thumbnailMediaId,
+      isSmart: isSmart ?? this.isSmart,
       path: path ?? this.path,
       lastModified: lastModified ?? this.lastModified,
     );
@@ -107,12 +115,21 @@ class Album {
           count == other.count &&
           type == other.type &&
           thumbnailMediaId == other.thumbnailMediaId &&
+          isSmart == other.isSmart &&
           path == other.path &&
           lastModified == other.lastModified;
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, count, type, thumbnailMediaId, path, lastModified);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    count,
+    type,
+    thumbnailMediaId,
+    isSmart,
+    path,
+    lastModified,
+  );
 
   @override
   String toString() =>

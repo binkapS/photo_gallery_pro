@@ -54,6 +54,26 @@ void main() {
       expect(cache.bytes, 8);
     });
 
+    test('concurrent getOrLoad for same id loads once', () async {
+      final ThumbnailCache cache = ThumbnailCache();
+      var calls = 0;
+      Future<Thumbnail> loader() async {
+        calls++;
+        await Future<void>.delayed(Duration.zero);
+        return Thumbnail(data: Uint8List.fromList(<int>[7]));
+      }
+
+      final List<Thumbnail> results = await Future.wait(<Future<Thumbnail>>[
+        cache.getOrLoad('x', loader),
+        cache.getOrLoad('x', loader),
+        cache.getOrLoad('x', loader),
+      ]);
+      expect(calls, 1);
+      for (final Thumbnail r in results) {
+        expect(r.data, <int>[7]);
+      }
+    });
+
     test('clear empties the cache', () async {
       final ThumbnailCache cache = ThumbnailCache();
       Future<Thumbnail> loader() async => Thumbnail(data: Uint8List(1));

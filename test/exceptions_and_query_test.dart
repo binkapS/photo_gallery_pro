@@ -20,6 +20,18 @@ void main() {
         PhotoGalleryException.fromCode('THUMBNAIL_ERROR', 'no'),
         isA<ThumbnailException>(),
       );
+      expect(
+        PhotoGalleryException.fromCode('ICLOUD_NOT_DOWNLOADED', 'no'),
+        isA<CloudNotDownloadedException>(),
+      );
+      expect(
+        PhotoGalleryException.fromCode('ALBUM_ERROR', 'no'),
+        isA<NotFoundException>(),
+      );
+      expect(
+        PhotoGalleryException.fromCode('FETCH_ERROR', 'no'),
+        isA<PlatformGalleryException>(),
+      );
     });
 
     test(

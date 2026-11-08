@@ -167,12 +167,41 @@ class PhotoGalleryPro {
     PageRequest? page,
     MediaSort sort = MediaSort.dateAddedDesc,
   }) async {
+    // Fetch without pagination so the filter sees every item; apply the
+    // page window only after filtering, otherwise matches beyond the
+    // first page would be silently missed.
     final List<Media> media = await getMediaInAlbum(
       albumId,
       type: type,
-      page: page,
       sort: sort,
     );
-    return media.where(query.matches).toList();
+    final List<Media> filtered = media.where(query.matches).toList();
+    if (page == null) return filtered;
+    final int start = page.offset.clamp(0, filtered.length);
+    final int end =
+        page.limit == null
+            ? filtered.length
+            : (start + page.limit!).clamp(start, filtered.length);
+    return filtered.sublist(start, end);
+  }
+
+  /// Finds a media item by its platform [mediaId], or `null` if it no
+  /// longer exists.
+  ///
+  /// Facade-only helper (like [getAlbumById]): it scans albums until the
+  /// item is found, so prefer [getMediaInAlbum] when you already know the
+  /// album. A native fast path may replace this later.
+  Future<Media?> getMediaById(String mediaId) async {
+    final List<Album> albums = await getAlbums();
+    for (final Album album in albums) {
+      final List<Media> media = await getMediaInAlbum(
+        album.id,
+        type: album.type,
+      );
+      for (final Media item in media) {
+        if (item.id == mediaId) return item;
+      }
+    }
+    return null;
   }
 }

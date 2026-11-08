@@ -5,6 +5,35 @@ All notable changes to `photo_gallery_pro` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.1.0
+
+Polish release addressing the verification findings in `VERIFICATION.md`
+§3 (all items marked Fixed below).
+
+### Added
+
+- `Media.dateCreated` (distinct from `dateAdded`; `created` now prefers it).
+- `Album.isSmart` (iOS smart albums, e.g. Camera Roll).
+- `PhotoGalleryPro.getMediaById()` facade helper.
+- `CloudNotDownloadedException` for `ICLOUD_NOT_DOWNLOADED`;
+  `ALBUM_ERROR` maps to `NotFoundException`.
+- `SUPPORT.md`.
+
+### Fixed
+
+- `VideoMedia` duration no longer lost on `toJson` round-trip.
+- `searchMedia` filters before paginating (matches beyond page 1 found).
+- `ThumbnailCache` deduplicates concurrent loads for the same id.
+- `Media.fromJson` rejects missing/`mixed` item types instead of silently
+  guessing `image`.
+- iOS: removed KVC `value(forKey: "fileSize")` for media size (now `0`).
+- Android: thumbnail/batch/original-byte results are delivered on the
+  main thread, like album/media results.
+- Linux: the `~/Pictures` root is exposed as an album so loose files are
+  visible; album ids for the root resolve back to the root directory.
+- Example: `PhotoViewer` fetches once in `initState`; media grid is
+  pull-to-refresh; denied state offers an "Open Settings" hint.
+
 ## 1.0.0
 
 Stable release. See [MIGRATION.md](MIGRATION.md) for the 0.0.x → 1.0

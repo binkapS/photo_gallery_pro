@@ -29,6 +29,9 @@ class ThumbnailCache {
   // LinkedHashMap iteration order = insertion order; we re-insert on
   // access so the front of the map is always the least-recently-used entry.
   final Map<String, Thumbnail> _entries = <String, Thumbnail>{};
+  // In-flight loads, so concurrent grid cells for the same id share a
+  // single platform call instead of racing each other.
+  final Map<String, Future<Thumbnail>> _pending = <String, Future<Thumbnail>>{};
   int _bytes = 0;
 
   /// The number of thumbnails currently cached.
@@ -49,15 +52,18 @@ class ThumbnailCache {
 
   /// Returns the cached thumbnail for [id], loading it with [loader] first
   /// if it is not already cached.
-  Future<Thumbnail> getOrLoad(
-    String id,
-    Future<Thumbnail> Function() loader,
-  ) async {
+  Future<Thumbnail> getOrLoad(String id, Future<Thumbnail> Function() loader) {
     final cached = get(id);
-    if (cached != null) return cached;
-    final loaded = await loader();
-    put(id, loaded);
-    return loaded;
+    if (cached != null) return Future.value(cached);
+    return _pending.putIfAbsent(id, () async {
+      try {
+        final loaded = await loader();
+        put(id, loaded);
+        return loaded;
+      } finally {
+        _pending.remove(id);
+      }
+    });
   }
 
   /// Inserts [thumbnail] under [id], evicting LRU entries until both

@@ -95,6 +95,55 @@ void main() {
       expect(Media.fromJson(original.toJson()), original);
     });
 
+    test('mixed type for a single item throws', () {
+      expect(
+        () => Media.fromJson(<String, dynamic>{'id': '1', 'type': 'mixed'}),
+        throwsFormatException,
+      );
+    });
+
+    test('missing type throws', () {
+      expect(
+        () => Media.fromJson(<String, dynamic>{'id': '1'}),
+        throwsFormatException,
+      );
+    });
+
+    test('video round-trips duration through toJson/fromJson', () {
+      final Media original = Media.fromJson(<String, dynamic>{
+        'id': '11',
+        'name': 'clip.mp4',
+        'uri': '11',
+        'type': 'video',
+        'dateAdded': 1_700_000_000,
+        'duration': 90_000,
+        'size': 51_200,
+        'width': 1920,
+        'height': 1080,
+      });
+      final Media restored = Media.fromJson(original.toJson());
+      expect(restored, original);
+      expect(
+        (restored as VideoMedia).duration,
+        const Duration(milliseconds: 90_000),
+      );
+    });
+
+    test('dateCreated is parsed and exposed via created', () {
+      final Media media = Media.fromJson(<String, dynamic>{
+        'id': '1',
+        'name': 'a.jpg',
+        'type': 'image',
+        'dateAdded': 1_700_000_000,
+        'dateCreated': 1_600_000_000,
+      });
+      expect(
+        media.dateCreated,
+        DateTime.fromMillisecondsSinceEpoch(1_600_000_000_000),
+      );
+      expect(media.created, media.dateCreated);
+    });
+
     test('image and video with same id are not equal', () {
       final Media image = Media.fromJson(<String, dynamic>{
         'id': '1',

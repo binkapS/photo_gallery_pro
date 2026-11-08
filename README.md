@@ -55,7 +55,7 @@ final thumb = await gallery.getThumbnail(
 
 ```yaml
 dependencies:
-  photo_gallery_pro: ^1.0.0
+  photo_gallery_pro: ^1.1.0
 ```
 
 ## Platform Setup
@@ -79,7 +79,7 @@ only the selected media.
 
 ### Linux
 
-No permissions required. Albums are subdirectories of `~/Pictures`.
+No permissions required. Albums are subdirectories of `~/Pictures`, plus the `~/Pictures` root itself (named `Pictures`) so loose files are visible.
 Supported formats: `jpg jpeg png gif webp tiff tif heic heif bmp`
 (images), `mp4 avi mkv mov webm m4v mpeg mpg 3gp` (videos).
 
@@ -93,6 +93,7 @@ Supported formats: `jpg jpeg png gif webp tiff tif heic heif bmp`
 | `getAlbums({type, page})` | All albums; `type` defaults to `mixed` |
 | `getMediaInAlbum(id, {type, page, sort})` | Paginated, sorted media |
 | `getAlbumById(id)` | Single album lookup, or `null` |
+| `getMediaById(id)` | Single media lookup across albums, or `null` |
 | `getThumbnail(id, {size, format, type})` | One thumbnail |
 | `getAlbumThumbnail(id, {type, size, format})` | Representative album thumbnail |
 | `getThumbnailBatch(ids, {size, format})` | `Map<String, Thumbnail>` for grids |
@@ -107,7 +108,7 @@ Supported formats: `jpg jpeg png gif webp tiff tif heic heif bmp`
 | `uri` | Platform-native lookup key — **use this** to request bytes |
 | `filePath` | Local path, only when the file is actually cached locally (`null` for cloud/scoped-storage) |
 | `name` / `filename` | File name |
-| `dateAdded` / `created` | Epoch-seconds date the platform reports |
+| `dateAdded` / `dateCreated` / `created` | Added date; creation (EXIF) date when known; `created` prefers `dateCreated` |
 | `dateModified`, `mimeType`, `size`, `width`, `height` | Metadata, `0`/`null` when unknown |
 | `latitude` / `longitude` | GPS, when exposed (location permission) |
 | `duration` | Videos only (`Duration`, milliseconds) |
@@ -117,6 +118,7 @@ Supported formats: `jpg jpeg png gif webp tiff tif heic heif bmp`
 | `id` | Opaque (Android bucket / iOS collection / Linux dir name) |
 | `name`, `count`, `type` | Display name, item count, classified `MediaType` |
 | `thumbnailMediaId` | Newest item in the album |
+| `isSmart` | `true` for platform smart albums (e.g. iOS Camera Roll) |
 | `path` | Linux only (album directory) |
 | `lastModified` | Newest item's added date |
 
@@ -130,6 +132,7 @@ Failures throw typed exceptions (all `PhotoGalleryException` subclasses):
 | `NotFoundException` | `NOT_FOUND` | Album/media vanished |
 | `UnsupportedMediaTypeException` | `INVALID_TYPE` | Bad type argument |
 | `ThumbnailException` | `THUMBNAIL_ERROR` | Thumbnail generation failed |
+| `CloudNotDownloadedException` | `ICLOUD_NOT_DOWNLOADED` | Cloud-only media not downloaded |
 | `PlatformGalleryException` | other | Platform-specific failures |
 
 ## Caching thumbnails

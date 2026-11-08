@@ -36,6 +36,12 @@ sealed class PhotoGalleryException implements Exception {
       'NOT_FOUND' => NotFoundException(message, details),
       'INVALID_TYPE' => UnsupportedMediaTypeException(message, details),
       'THUMBNAIL_ERROR' => ThumbnailException(message, details),
+      'ICLOUD_NOT_DOWNLOADED' => CloudNotDownloadedException(message, details),
+      'ALBUM_ERROR' ||
+      'ALBUM_THUMBNAIL_ERROR' => NotFoundException(message, details),
+      'ALBUMS_ERROR' ||
+      'FETCH_ERROR' ||
+      'READ_ERROR' => PlatformGalleryException(code, message, details),
       _ => PlatformGalleryException(code, message, details),
     };
   }
@@ -76,6 +82,16 @@ class ThumbnailException extends PhotoGalleryException {
     String message = 'Thumbnail error',
     Object? details,
   ]) : super('THUMBNAIL_ERROR', message, details);
+}
+
+/// The media is stored in the cloud (e.g. iCloud) and has not been
+/// downloaded to this device.
+class CloudNotDownloadedException extends PhotoGalleryException {
+  /// Creates a [CloudNotDownloadedException].
+  const CloudNotDownloadedException([
+    String message = 'Media is not downloaded',
+    Object? details,
+  ]) : super('ICLOUD_NOT_DOWNLOADED', message, details);
 }
 
 /// Any other gallery failure originating on the platform.
