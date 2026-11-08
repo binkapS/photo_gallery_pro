@@ -1,7 +1,7 @@
 import Flutter
 import UIKit
 import Photos
-import PhotosUI
+import UniformTypeIdentifiers
 
 public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
     public static func register(with registrar: FlutterPluginRegistrar) {
@@ -9,374 +9,500 @@ public class PhotoGalleryProPlugin: NSObject, FlutterPlugin {
         let instance = PhotoGalleryProPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
-    
+
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "getAlbums":
             getAlbums(call, result: result)
         case "getMediaInAlbum":
-            guard let args = call.arguments as? [String: Any],
-                  let albumId = args["albumId"] as? String,
-                  let mediaType = args["mediaType"] as? String else {
-                result(FlutterError(code: "INVALID_ARGUMENTS",
-                                  message: "Album ID and media type required",
-                                  details: nil))
-                return
-            }
-            getMediaInAlbum(albumId: albumId, mediaType: mediaType, result: result)
+            getMediaInAlbum(call, result: result)
         case "getThumbnail":
-            guard let args = call.arguments as? [String: Any],
-                  let mediaId = args["mediaId"] as? String,
-                  let mediaType = args["mediaType"] as? String else {
-                result(FlutterError(code: "INVALID_ARGUMENTS",
-                                  message: "Media ID and type required",
-                                  details: nil))
-                return
-            }
-            getThumbnail(mediaId: mediaId, mediaType: mediaType, result: result)
-        case "hasPermission":
-            checkPermission(result: result)
-        case "requestPermission":
-            requestPermission(result: result)
+            getThumbnail(call, result: result)
         case "getAlbumThumbnail":
-            checkAuthorization { authorized in 
-                if authorized {
-                    self.getAlbumThumbnail(call, result: result)
-                } else {
-                    result(FlutterError(
-                        code: "PERMISSION_ERROR",
-                        message: "Photo library access denied",
-                        details: nil
-                    ))
+            getAlbumThumbnail(call, result: result)
+        case "getThumbnailBatch":
+            getThumbnailBatch(call, result: result)
+        case "getOriginalBytes":
+            getOriginalBytes(call, result: result)
+        case "getPermissionStatus":
+            result(permissionStatusString(PHPhotoLibrary.authorizationStatus(for: .readWrite)))
+        case "hasPermission":
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            result(status == .authorized || status == .limited)
+        case "requestPermission":
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+                DispatchQueue.main.async {
+                    result(self.permissionStatusString(status))
                 }
             }
+        case "getPlatformVersion":
+            result("iOS \(UIDevice.current.systemVersion)")
         default:
             result(FlutterMethodNotImplemented)
         }
     }
-    
-    private func getAlbums(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let mediaType = (call.arguments as? [String: Any])?["mediaType"] as? String
-        
-        let fetchOptions = PHFetchOptions()
-        
-        // Set media type filter if specified
-        if let mediaType = mediaType {
-            switch mediaType {
-            case "image":
-                fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
-            case "video":
-                fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
-            default:
-                result(FlutterError(code: "INVALID_TYPE", message: "Invalid media type: \(mediaType)", details: nil))
-                return
-            }
+
+    // MARK: - Permission helpers
+
+    private func permissionStatusString(_ status: PHAuthorizationStatus) -> String {
+        switch status {
+        case .authorized:
+            return "granted"
+        case .limited:
+            return "limited"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "notDetermined"
+        @unknown default:
+            return "denied"
         }
-        
-        // Fetch user albums
-        let userAlbums = PHAssetCollection.fetchAssetCollections(
-            with: .album,
-            subtype: .any,
-            options: nil
-        )
-        
-        // Fetch smart albums (Camera Roll, Videos, etc)
-        let smartAlbums = PHAssetCollection.fetchAssetCollections(
-            with: .smartAlbum,
-            subtype: .any,
-            options: nil
-        )
-        
-        var albums: [[String: Any]] = []
-        
-        // Process albums
-        for collection in [userAlbums, smartAlbums] {
-            collection.enumerateObjects { (album, _, _) in
-                let assets = PHAsset.fetchAssets(in: album, options: fetchOptions)
-                if assets.count > 0 {
-                    // Determine album type based on first asset
-                    let albumType = assets.firstObject?.mediaType == .video ? "video" : "image"
-                    
-                    albums.append([
-                        "id": album.localIdentifier,
-                        "name": album.localizedTitle ?? "Unknown",
-                        "count": assets.count,
-                        "type": albumType
-                    ])
-                }
-            }
-        }
-        
-        result(albums)
-    }
-    
-    private func getMediaInAlbum(albumId: String, mediaType: String, result: @escaping FlutterResult) {
-        let mediaList = getMediaInAlbum(albumId, mediaType: mediaType)
-        result(mediaList)
-    }
-    
-    private func getMediaInAlbum(_ albumId: String, mediaType: String) -> [[String: Any]] {
-        var mediaList: [[String: Any]] = []
-        
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        
-        let album = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumId], options: nil)
-        guard let collection = album.firstObject else { return [] }
-        
-        let assetsFetchResult = PHAsset.fetchAssets(in: collection, options: fetchOptions)
-        
-        assetsFetchResult.enumerateObjects { (asset, index, stop) in
-            let resourceManager = PHAssetResourceManager.default()
-            let resources = PHAssetResource.assetResources(for: asset)
-            
-            if let resource = resources.first {
-                var media: [String: Any] = [:]
-                media["id"] = asset.localIdentifier
-                media["name"] = resource.originalFilename
-                media["dateAdded"] = Int(asset.creationDate?.timeIntervalSince1970 ?? 0)  // Convert to Int
-                // Convert file size to Int
-                if let fileSize = resource.value(forKey: "fileSize") as? Double {
-                    media["size"] = Int(fileSize)
-                } else {
-                    media["size"] = 0
-                }
-                media["width"] = asset.pixelWidth
-                media["height"] = asset.pixelHeight
-                media["type"] = mediaType.lowercased()
-                
-                // Get file path
-                var path: String = ""
-                if let fileURL = self.getAssetLocalURL(asset: asset) {
-                    path = fileURL.path
-                }
-                media["path"] = path
-                
-                mediaList.append(media)
-            }
-        }
-        
-        return mediaList
     }
 
-    private func getAssetLocalURL(asset: PHAsset) -> URL? {
-        var localURL: URL?
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        if asset.mediaType == .image {
-            let options = PHImageRequestOptions()
-            options.isSynchronous = true
-            options.version = .original
-            
-            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { (data, _, _, info) in
-                if let fileURL = info?["PHImageFileURLKey"] as? URL {
-                    localURL = fileURL
-                }
-                semaphore.signal()
-            }
-        } else if asset.mediaType == .video {
-            let options = PHVideoRequestOptions()
-            options.version = .original
-            
-            PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { (avAsset, _, _) in
-                if let urlAsset = avAsset as? AVURLAsset {
-                    localURL = urlAsset.url
-                }
-                semaphore.signal()
-            }
-        }
-        
-        _ = semaphore.wait(timeout: .now() + 30)
-        return localURL
+    private var hasReadPermission: Bool {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        return status == .authorized || status == .limited
     }
-    
-    private func getThumbnail(mediaId: String, mediaType: String, result: @escaping FlutterResult) {
-        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [mediaId], options: nil).firstObject else {
-            result(FlutterError(code: "INVALID_MEDIA", 
-                              message: "Media not found", 
-                              details: nil))
-            return
+
+    private func permissionError() -> FlutterError {
+        return FlutterError(code: "PERMISSION_ERROR", message: "Photo library access denied", details: nil)
+    }
+
+    // MARK: - Argument helpers
+
+    private func optionalInt(_ value: Any?) -> Int? {
+        if let number = value as? NSNumber {
+            return number.intValue
         }
-        
+        return nil
+    }
+
+    private func targetSize(from args: [String: Any]) -> (width: Int, height: Int) {
+        let width = optionalInt(args["width"]) ?? 320
+        let height = optionalInt(args["height"]) ?? width
+        return (width, height)
+    }
+
+    private func thumbnailFormat(from args: [String: Any]) -> String {
+        let raw = (args["format"] as? String)?.lowercased() ?? "jpeg"
+        return raw == "png" ? "png" : "jpeg"
+    }
+
+    // MARK: - Shared thumbnail helper (Single source of thumbnail logic)
+
+    /// Requests a scaled thumbnail for an asset. Calls `completion` exactly once.
+    private func requestThumbnailData(
+        asset: PHAsset,
+        targetWidth: Int,
+        targetHeight: Int,
+        format: String,
+        completion: @escaping (Data?, Int, Int, String) -> Void
+    ) {
         let options = PHImageRequestOptions()
         options.deliveryMode = .highQualityFormat
         options.isSynchronous = false
-        
+        options.isNetworkAccessAllowed = true
+        options.resizeMode = .fast
         PHImageManager.default().requestImage(
             for: asset,
-            targetSize: CGSize(width: 320, height: 320),
+            targetSize: CGSize(width: targetWidth, height: targetHeight),
             contentMode: .aspectFill,
             options: options
-        ) { image, info in
+        ) { image, _ in
+            let effectiveFormat = format == "png" ? "png" : "jpeg"
             guard let image = image else {
-                result(FlutterError(code: "THUMBNAIL_ERROR",
-                                  message: "Could not generate thumbnail",
-                                  details: nil))
+                completion(nil, targetWidth, targetHeight, effectiveFormat)
                 return
             }
-            
-            guard let data = image.jpegData(compressionQuality: 0.9) else {
-                result(FlutterError(code: "COMPRESSION_ERROR",
-                                  message: "Failed to compress image",
-                                  details: nil))
-                return
+            if effectiveFormat == "png" {
+                completion(image.pngData(), targetWidth, targetHeight, effectiveFormat)
+            } else {
+                completion(image.jpegData(compressionQuality: 0.9), targetWidth, targetHeight, effectiveFormat)
             }
-            
-            result(FlutterStandardTypedData(bytes: data))
         }
     }
-    
-    private func getAlbumThumbnail(albumId: String, mediaType: String, result: @escaping FlutterResult) {
-        // Fetch the album by its local identifier.
-        let fetchOptions = PHFetchOptions()
-        let collections = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumId], options: fetchOptions)
-        guard let collection = collections.firstObject else {
-            result(FlutterError(code: "ALBUM_ERROR", message: "Album not found: \(albumId)", details: nil))
+
+    private func thumbnailMap(data: Data, width: Int, height: Int, format: String) -> [String: Any] {
+        return [
+            "data": FlutterStandardTypedData(bytes: data),
+            "width": width,
+            "height": height,
+            "format": format,
+        ]
+    }
+
+    // MARK: - getAlbums
+
+    private func getAlbums(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard hasReadPermission else {
+            result(permissionError())
             return
         }
-        
-        // Fetch assets in the album. You may add a predicate to filter by mediaType if needed.
-        let assets = PHAsset.fetchAssets(in: collection, options: nil)
-        guard assets.count > 0, let asset = assets.firstObject else {
-            result(FlutterError(code: "ALBUM_THUMBNAIL_ERROR", message: "No assets found in album: \(albumId)", details: nil))
-            return
-        }
-        
-        // Request a thumbnail image from the asset.
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
-        options.resizeMode = .fast
-        options.isNetworkAccessAllowed = false
-        
-        let targetSize = CGSize(width: 320, height: 320)
-        PHImageManager.default().requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFill, options: options) { (image, info) in
-            guard let img = image, let data = img.jpegData(compressionQuality: 0.9) else {
-                result(FlutterError(code: "ALBUM_THUMBNAIL_ERROR", message: "Could not generate album thumbnail.", details: nil))
+
+        let args = (call.arguments as? [String: Any]) ?? [:]
+        let mediaTypeRaw = args["mediaType"] as? String
+        if let mediaTypeRaw = mediaTypeRaw {
+            switch mediaTypeRaw {
+            case "image", "video", "mixed":
+                break
+            default:
+                result(FlutterError(code: "INVALID_TYPE", message: "Invalid media type: \(mediaTypeRaw)", details: nil))
                 return
             }
-            result(FlutterStandardTypedData(bytes: data))
         }
+        let offset = optionalInt(args["offset"]) ?? 0
+        let limit = optionalInt(args["limit"])
+
+        var albums: [[String: Any]] = []
+
+        let albumCollections = [
+            PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil),
+            PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: nil),
+        ]
+
+        for collections in albumCollections {
+            collections.enumerateObjects { album, _, _ in
+                guard album.assetCollectionSubtype != .any else { return }
+
+                let assetFetchOptions = PHFetchOptions()
+                assetFetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                let albumAssets = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
+
+                var imageCount = 0
+                var videoCount = 0
+                albumAssets.enumerateObjects { asset, _, _ in
+                    if asset.mediaType == .image {
+                        imageCount += 1
+                    } else if asset.mediaType == .video {
+                        videoCount += 1
+                    }
+                }
+
+                let total = imageCount + videoCount
+                guard total > 0 else { return }
+
+                if let filter = mediaTypeRaw {
+                    if filter == "image" && imageCount == 0 { return }
+                    if filter == "video" && videoCount == 0 { return }
+                }
+
+                let albumType: String
+                if imageCount > 0 && videoCount > 0 {
+                    albumType = "mixed"
+                } else if videoCount > 0 {
+                    albumType = "video"
+                } else {
+                    albumType = "image"
+                }
+
+                var thumbnailAsset: PHAsset?
+                for candidate in albumAssets {
+                    if let filter = mediaTypeRaw {
+                        if filter == "image" && candidate.mediaType != .image { continue }
+                        if filter == "video" && candidate.mediaType != .video { continue }
+                    }
+                    thumbnailAsset = candidate
+                    break
+                }
+
+                var entry: [String: Any] = [
+                    "id": album.localIdentifier,
+                    "name": album.localizedTitle ?? "Unknown",
+                    "count": total,
+                    "type": albumType,
+                ]
+                if let thumb = thumbnailAsset {
+                    entry["thumbnailMediaId"] = thumb.localIdentifier
+                    entry["lastModified"] = Int(thumb.creationDate?.timeIntervalSince1970 ?? 0)
+                }
+                albums.append(entry)
+            }
+        }
+
+        let start = max(0, offset)
+        let boundedStart = min(start, albums.count)
+        let boundedEnd = limit.map { min(albums.count, boundedStart + max(0, $0)) } ?? albums.count
+        result(Array(albums[boundedStart..<boundedEnd]))
     }
-    
-    private func getAlbumThumbnail(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+
+    // MARK: - getMediaInAlbum
+
+    private func getMediaInAlbum(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard hasReadPermission else {
+            result(permissionError())
+            return
+        }
+
         guard let args = call.arguments as? [String: Any],
-              let albumId = args["albumId"] as? String,
-              let mediaType = args["mediaType"] as? String else {
-            result(FlutterError(
-                code: "INVALID_ARGUMENTS",
-                message: "Album ID and media type required",
-                details: nil
-            ))
+              let albumId = args["albumId"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Album ID required", details: nil))
             return
         }
-        
-        // Create fetch options
+        let mediaTypeRaw = (args["mediaType"] as? String) ?? "mixed"
+        switch mediaTypeRaw {
+        case "image", "video", "mixed":
+            break
+        default:
+            result(FlutterError(code: "INVALID_TYPE", message: "Invalid media type: \(mediaTypeRaw)", details: nil))
+            return
+        }
+
+        guard let collection = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [albumId], options: nil
+        ).firstObject else {
+            result(FlutterError(code: "NOT_FOUND", message: "Album not found: \(albumId)", details: nil))
+            return
+        }
+
         let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        
-        // Filter based on media type
-        switch mediaType {
+        switch mediaTypeRaw {
         case "image":
             fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
         case "video":
             fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
         default:
-            result(FlutterError(
-                code: "INVALID_TYPE",
-                message: "Invalid media type: \(mediaType)",
-                details: nil
-            ))
-            return
+            fetchOptions.predicate = NSPredicate(format: "mediaType = %d OR mediaType = %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
         }
-        
-        // Fetch the album
-        guard let collection = PHAssetCollection.fetchAssetCollections(
-            withLocalIdentifiers: [albumId],
-            options: nil
-        ).firstObject else {
-            result(FlutterError(
-                code: "ALBUM_ERROR",
-                message: "Album not found: \(albumId)",
-                details: nil
-            ))
-            return
-        }
-        
-        // Fetch assets in the album
+
         let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
-        guard let firstAsset = assets.firstObject else {
-            result(FlutterError(
-                code: "ALBUM_THUMBNAIL_ERROR",
-                message: "No media found in album: \(albumId)",
-                details: nil
-            ))
+
+        var mediaList: [[String: Any]] = []
+        assets.enumerateObjects { asset, _, _ in
+            // Build metadata only; never read image data synchronously.
+            let resources = PHAssetResource.assetResources(for: asset)
+            let firstResource = resources.first
+            let name = firstResource?.originalFilename ?? ""
+            let mimeType: String
+            if let first = firstResource {
+                let ext = (first.originalFilename as NSString).pathExtension
+                mimeType = UTType(filenameExtension: ext)?.preferredMIMEType ?? ""
+            } else {
+                mimeType = ""
+            }
+            let size: Int
+            if let first = firstResource, let fileSize = first.value(forKey: "fileSize") as? NSNumber {
+                size = fileSize.intValue
+            } else {
+                size = 0
+            }
+            let dateAdded = Int(asset.creationDate?.timeIntervalSince1970 ?? 0)
+            let dateModified = Int(asset.modificationDate?.timeIntervalSince1970 ?? asset.creationDate?.timeIntervalSince1970 ?? 0)
+            var media: [String: Any] = [
+                "id": asset.localIdentifier,
+                "uri": asset.localIdentifier,
+                "name": name,
+                "mimeType": mimeType,
+                "type": asset.mediaType == .video ? "video" : "image",
+                "dateAdded": dateAdded,
+                "dateModified": dateModified,
+                "size": size,
+                "width": asset.pixelWidth,
+                "height": asset.pixelHeight,
+            ]
+            if asset.mediaType == .video {
+                media["duration"] = Int(asset.duration.seconds * 1000)
+            }
+            // filePath is intentionally omitted; uri is the lookup key.
+            mediaList.append(media)
+        }
+
+        let sortRaw = (args["sort"] as? String) ?? "dateAddedDesc"
+        switch sortRaw {
+        case "dateAddedAsc":
+            mediaList.sort { ($0["dateAdded"] as? Int ?? 0) < ($1["dateAdded"] as? Int ?? 0) }
+        case "nameAsc":
+            mediaList.sort { (($0["name"] as? String) ?? "") < (($1["name"] as? String) ?? "") }
+        case "sizeDesc":
+            mediaList.sort { ($0["size"] as? Int ?? 0) > ($1["size"] as? Int ?? 0) }
+        default:
+            mediaList.sort { ($0["dateAdded"] as? Int ?? 0) > ($1["dateAdded"] as? Int ?? 0) }
+        }
+
+        let offset = optionalInt(args["offset"]) ?? 0
+        let limit = optionalInt(args["limit"])
+        let start = max(0, offset)
+        let boundedStart = min(start, mediaList.count)
+        let boundedEnd = limit.map { min(mediaList.count, boundedStart + max(0, $0)) } ?? mediaList.count
+        result(Array(mediaList[boundedStart..<boundedEnd]))
+    }
+
+    // MARK: - getThumbnail
+
+    private func getThumbnail(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard hasReadPermission else {
+            result(permissionError())
             return
         }
-        
-        // Configure thumbnail request options
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
-        options.resizeMode = .exact
-        options.isSynchronous = false
-        options.isNetworkAccessAllowed = true
-        
-        // Request thumbnail image
-        PHImageManager.default().requestImage(
-            for: firstAsset,
-            targetSize: CGSize(width: 320, height: 320),
-            contentMode: .aspectFill,
-            options: options
-        ) { image, info in
-            guard let image = image,
-                  let data = image.jpegData(compressionQuality: 0.9) else {
-                result(FlutterError(
-                    code: "THUMBNAIL_ERROR",
-                    message: "Could not generate thumbnail",
-                    details: nil
-                ))
-                return
-            }
-            
-            // Return thumbnail data
-            result(FlutterStandardTypedData(bytes: data))
+        guard let args = call.arguments as? [String: Any],
+              let mediaId = args["mediaId"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Media ID required", details: nil))
+            return
         }
-    }
-    
-    // Helper method to determine if asset is cached locally
-    private func isAssetCached(_ asset: PHAsset) -> Bool {
-        let resources = PHAssetResource.assetResources(for: asset)
-        guard let resource = resources.first else { return false }
-        
-        return resource.value(forKey: "fileSize") != nil
-    }
-    
-    private func checkPermission(result: @escaping FlutterResult) {
-        let status = PHPhotoLibrary.authorizationStatus()
-        switch status {
-        case .authorized, .limited:
-            result(true)
-        default:
-            result(false)
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [mediaId], options: nil).firstObject else {
+            result(FlutterError(code: "NOT_FOUND", message: "Media not found: \(mediaId)", details: nil))
+            return
+        }
+        let size = targetSize(from: args)
+        let format = thumbnailFormat(from: args)
+        requestThumbnailData(asset: asset, targetWidth: size.width, targetHeight: size.height, format: format) { data, width, height, effectiveFormat in
+            if let data = data {
+                let payload = self.thumbnailMap(data: data, width: width, height: height, format: effectiveFormat)
+                DispatchQueue.main.async { result(payload) }
+            } else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "THUMBNAIL_ERROR", message: "Could not generate thumbnail", details: nil))
+                }
+            }
         }
     }
 
-    private func requestPermission(result: @escaping FlutterResult) {
-        PHPhotoLibrary.requestAuthorization { status in
-            DispatchQueue.main.async {
-                result(status == .authorized || status == .limited)
+    // MARK: - getAlbumThumbnail
+
+    private func getAlbumThumbnail(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard hasReadPermission else {
+            result(permissionError())
+            return
+        }
+        guard let args = call.arguments as? [String: Any],
+              let albumId = args["albumId"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Album ID required", details: nil))
+            return
+        }
+        let mediaTypeRaw = (args["mediaType"] as? String) ?? "mixed"
+        switch mediaTypeRaw {
+        case "image", "video", "mixed":
+            break
+        default:
+            result(FlutterError(code: "INVALID_TYPE", message: "Invalid media type: \(mediaTypeRaw)", details: nil))
+            return
+        }
+        guard let collection = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [albumId], options: nil
+        ).firstObject else {
+            result(FlutterError(code: "NOT_FOUND", message: "Album not found: \(albumId)", details: nil))
+            return
+        }
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        switch mediaTypeRaw {
+        case "image":
+            fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+        case "video":
+            fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+        default:
+            fetchOptions.predicate = NSPredicate(format: "mediaType = %d OR mediaType = %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
+        }
+        let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
+        guard let firstAsset = assets.firstObject else {
+            result(FlutterError(code: "THUMBNAIL_ERROR", message: "No media found in album: \(albumId)", details: nil))
+            return
+        }
+        let size = targetSize(from: args)
+        let format = thumbnailFormat(from: args)
+        requestThumbnailData(asset: firstAsset, targetWidth: size.width, targetHeight: size.height, format: format) { data, width, height, effectiveFormat in
+            if let data = data {
+                let payload = self.thumbnailMap(data: data, width: width, height: height, format: effectiveFormat)
+                DispatchQueue.main.async { result(payload) }
+            } else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "THUMBNAIL_ERROR", message: "Could not generate thumbnail", details: nil))
+                }
             }
         }
     }
-    
-    private func checkAuthorization(completion: @escaping (Bool) -> Void) {
-        let status = PHPhotoLibrary.authorizationStatus()
-        switch status {
-        case .authorized, .limited:
-            completion(true)
-        default:
-            PHPhotoLibrary.requestAuthorization { newStatus in
+
+    // MARK: - getThumbnailBatch
+
+    private func getThumbnailBatch(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard hasReadPermission else {
+            result(permissionError())
+            return
+        }
+        guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Arguments required", details: nil))
+            return
+        }
+        var mediaIds: [String] = []
+        if let strings = args["mediaIds"] as? [String] {
+            mediaIds = strings
+        } else if let bridged = args["mediaIds"] as? [Any] {
+            mediaIds = bridged.compactMap { $0 as? String }
+        } else if let array = args["mediaIds"] as? NSArray {
+            mediaIds = array.compactMap { $0 as? String }
+        }
+        let size = targetSize(from: args)
+        let format = thumbnailFormat(from: args)
+        var results: [String: Any] = [:]
+
+        func step(_ index: Int) {
+            if index >= mediaIds.count {
+                DispatchQueue.main.async { result(results) }
+                return
+            }
+            let mediaId = mediaIds[index]
+            guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [mediaId], options: nil).firstObject else {
+                step(index + 1)
+                return
+            }
+            requestThumbnailData(asset: asset, targetWidth: size.width, targetHeight: size.height, format: format) { data, width, height, effectiveFormat in
+                if let data = data {
+                    results[mediaId] = [
+                        "data": FlutterStandardTypedData(bytes: data),
+                        "width": width,
+                        "height": height,
+                        "format": effectiveFormat,
+                    ]
+                }
+                step(index + 1)
+            }
+        }
+        step(0)
+    }
+
+    // MARK: - getOriginalBytes
+
+    private func getOriginalBytes(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard hasReadPermission else {
+            result(permissionError())
+            return
+        }
+        guard let args = call.arguments as? [String: Any],
+              let mediaId = args["mediaId"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Media ID required", details: nil))
+            return
+        }
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [mediaId], options: nil).firstObject else {
+            result(FlutterError(code: "NOT_FOUND", message: "Media not found: \(mediaId)", details: nil))
+            return
+        }
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let resource = resources.first else {
+            result(FlutterError(code: "NOT_FOUND", message: "Media not found: \(mediaId)", details: nil))
+            return
+        }
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = false
+        PHAssetResourceManager.default().writeData(for: resource, to: tempURL, options: options) { error in
+            if error != nil {
+                try? FileManager.default.removeItem(at: tempURL)
                 DispatchQueue.main.async {
-                    completion(newStatus == .authorized || newStatus == .limited)
+                    result(FlutterError(code: "ICLOUD_NOT_DOWNLOADED", message: "Asset not locally downloaded", details: nil))
+                }
+                return
+            }
+            do {
+                let data = try Data(contentsOf: tempURL)
+                try? FileManager.default.removeItem(at: tempURL)
+                DispatchQueue.main.async {
+                    result(FlutterStandardTypedData(bytes: data))
+                }
+            } catch {
+                try? FileManager.default.removeItem(at: tempURL)
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "ICLOUD_NOT_DOWNLOADED", message: "Could not read asset data", details: nil))
                 }
             }
         }
