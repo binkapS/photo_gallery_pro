@@ -17,7 +17,18 @@ jobs:
       - run: flutter pub get
       - run: dart format --set-exit-if-changed .
       - run: flutter analyze
-      - run: flutter test
+      - run: flutter test --coverage
+      - name: Enforce lib/ line-coverage gate (>= 60%)
+        run: |
+          python3 - <<'PYEOF'
+          import re, sys
+          data = open('coverage/lcov.info').read()
+          lines = [(c) for _, c in re.findall(r'^DA:(\d+),(\d+)$', data, re.M)]
+          hit = sum(1 for c in lines if int(c) > 0)
+          pct = 100 * hit / len(lines) if lines else 0
+          print(f'lib/ line coverage: {hit}/{len(lines)} = {pct:.0f}%')
+          sys.exit(0 if pct >= 60 else 1)
+          PYEOF
       - run: flutter pub publish --dry-run
 
   android:
