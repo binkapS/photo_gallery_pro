@@ -1,16 +1,42 @@
-# photo_gallery_pro_example
+# photo_gallery_pro example
 
-Demonstrates how to use the photo_gallery_pro plugin.
+A demo app for the `photo_gallery_pro` plugin: browse albums, filter
+Photos/Videos, view media details, and exercise permission flows
+(granted / denied / limited).
 
-## Getting Started
+## Running
 
-This project is a starting point for a Flutter application.
+```sh
+flutter run          # debug on a connected device/emulator
+flutter run --profile  # recommended for scroll-performance checks
+```
 
-A few resources to get you started if this is your first Flutter project:
+## Platform setup
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### Android
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The manifest already declares:
+
+- `READ_EXTERNAL_STORAGE` (Android ≤12)
+- `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` (Android 13+)
+- `READ_MEDIA_VISUAL_USER_SELECTED` (Android 14+ partial access)
+
+### iOS
+
+`Info.plist` declares `NSPhotoLibraryUsageDescription`. Limited
+photo-library access is supported: the demo shows a "Limited photo
+access" banner and only the user-selected media is visible.
+
+### Linux
+
+No permissions required. Albums are subdirectories of `~/Pictures`
+(top-level files in `~/Pictures` itself are not included). Supported
+formats: `jpg jpeg png gif webp tiff tif heic heif bmp` (images),
+`mp4 avi mkv mov webm m4v mpeg mpg 3gp` (videos).
+
+## Known limits
+
+- iCloud-only assets expose no `filePath`; the viewer shows
+  "(cloud / not locally cached)".
+- Thumbnails are cached in-memory (LRU, 500 entries / 20 MB). The
+  grid issues at most one platform call per media id.

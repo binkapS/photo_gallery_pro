@@ -4,23 +4,46 @@
   <a href="https://pub.dev/packages/photo_gallery_pro"><img src="https://img.shields.io/pub/v/photo_gallery_pro.svg" alt="pub.dev"></a>
   <a href="https://github.com/binkapS#sponsor-me"><img src="https://img.shields.io/github/sponsors/binkapS" alt="Sponsoring"></a>
   <a href="https://pub.dev/packages/photo_gallery_pro/score"><img src="https://img.shields.io/pub/likes/photo_gallery_pro" alt="likes"></a>
-  <a href="https://pub.dev/packages/photo_gallery_pro/score"><img src="https://img.shields.io/pub/points/photo_gallery_pro" alt="pub points"></a>
+  <a href="https://pub.dev/packages/photo_gallery_pro/score"><img src="https://img.shields.io/pub/points/photo_gallery_pro" alt="points"></a>
 </p>
 
-A Flutter plugin for accessing and managing photos and videos from the device gallery. Supports Android, iOS, and Linux platforms.
+A Flutter plugin for accessing photos and videos from the device media
+gallery with a typed, cross-platform Dart API. Supports **Android, iOS,
+and Linux**.
+
+```dart
+final gallery = PhotoGalleryPro();
+
+final status = await gallery.getPermissionStatus();
+if (!status.canReadMedia) {
+  await gallery.requestPermission();
+}
+
+final albums = await gallery.getAlbums(type: MediaType.mixed);
+final media = await gallery.getMediaInAlbum(
+  albums.first.id,
+  type: MediaType.mixed,               // mixed albums in one call
+  page: PageRequest(limit: 100),      // paginate large libraries
+  sort: MediaSort.dateAddedDesc,      // newest first
+);
+
+final thumb = await gallery.getThumbnail(
+  media.first.id,
+  size: const ThumbnailSize.square(256),
+  format: ThumbnailFormat.jpeg,
+);
+```
 
 ## Features
 
-- 📱 List all media albums (photos and videos)
-- 🖼️ Filter albums by media type (images or videos)
-- 📂 Get media items from specific albums
-- 🎬 Support for both images and videos
-- 👍 Permission handling (on Android and iOS)
-- 🔍 Generate thumbnails for:
-  - Individual media items
-  - Album covers
-- ⚡ Optimized performance
-- 🎨 Material Design 3 example app
+- 📱 Albums with per-album type classification (`image` / `video` / `mixed`)
+- 🖼️ Media in an album with pagination + sorting (pushed to native queries)
+- 🎬 Full image + video support, including video duration + MIME type
+- 🖼️ Configurable thumbnails (size/format), batched fetches, LRU cache
+- 👍 Permission model covering granted / denied / **limited** photo access
+- 🔍 Typed errors (`PhotoGalleryException` hierarchy) instead of strings
+- ⚡ Off-platform-thread queries; no main-thread blocking (iOS included)
+- 🧩 Federated plugin: mock `PhotoGalleryProPlatform` in tests
 
 ## Platform Support
 
@@ -30,168 +53,113 @@ A Flutter plugin for accessing and managing photos and videos from the device ga
 
 ## Installation
 
-Add this to your package's `pubspec.yaml` file:
-
 ```yaml
 dependencies:
-  photo_gallery_pro: ^0.0.4
+  photo_gallery_pro: ^1.0.0
 ```
 
 ## Platform Setup
 
 ### Android
 
-Add the following permissions to your Android Manifest (`android/app/src/main/AndroidManifest.xml`):
+The plugin's `AndroidManifest.xml` declares:
 
-```xml
-<!-- For Android 12 and below -->
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+- `READ_EXTERNAL_STORAGE` (Android ≤12)
+- `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` (Android 13+)
+- `READ_MEDIA_VISUAL_USER_SELECTED` (Android 14+ partial access)
 
-<!-- For Android 13 and above -->
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-```
+Your app should also declare the permissions it needs (the demo app does).
 
 ### iOS
 
-Add the following keys to your iOS Info.plist (`ios/Runner/Info.plist`):
-
-```xml
-<key>NSPhotoLibraryUsageDescription</key>
-<string>This app requires access to the photo library to display your photos and videos.</string>
-```
+Your app's `Info.plist` must declare `NSPhotoLibraryUsageDescription`.
+Limited photo-library access is supported: when the user grants access to
+a subset of photos, `PermissionStatus.limited` reports it and queries see
+only the selected media.
 
 ### Linux
 
-Ensure you have the necessary dependencies installed:
+No permissions required. Albums are subdirectories of `~/Pictures`.
+Supported formats: `jpg jpeg png gif webp tiff tif heic heif bmp`
+(images), `mp4 avi mkv mov webm m4v mpeg mpg 3gp` (videos).
 
-```bash
-sudo apt-get update
-sudo apt-get install libgtk-3-dev pkg-config cmake ninja-build libgdk-pixbuf2.0-dev
-```
+## API
 
-## Usage
+| Method | Description |
+|---|---|
+| `getPermissionStatus()` | Current `PermissionStatus` (granted/limited/denied/…) |
+| `requestPermission()` | Shows the system prompt; completes *after* it resolves |
+| `hasPermission()` | `true` for granted or limited access |
+| `getAlbums({type, page})` | All albums; `type` defaults to `mixed` |
+| `getMediaInAlbum(id, {type, page, sort})` | Paginated, sorted media |
+| `getAlbumById(id)` | Single album lookup, or `null` |
+| `getThumbnail(id, {size, format, type})` | One thumbnail |
+| `getAlbumThumbnail(id, {type, size, format})` | Representative album thumbnail |
+| `getThumbnailBatch(ids, {size, format})` | `Map<String, Thumbnail>` for grids |
+| `getOriginalBytes(id)` | Full-resolution bytes (may download from iCloud) |
+| `searchMedia(id, query, {...})` | `MediaQuery` filtering (name/date/size/mime/duration) |
 
-### Basic Setup
+### Models
+
+| `Media` field | Notes |
+|---|---|
+| `id` | Opaque platform id (treat as opaque) |
+| `uri` | Platform-native lookup key — **use this** to request bytes |
+| `filePath` | Local path, only when the file is actually cached locally (`null` for cloud/scoped-storage) |
+| `name` / `filename` | File name |
+| `dateAdded` / `created` | Epoch-seconds date the platform reports |
+| `dateModified`, `mimeType`, `size`, `width`, `height` | Metadata, `0`/`null` when unknown |
+| `latitude` / `longitude` | GPS, when exposed (location permission) |
+| `duration` | Videos only (`Duration`, milliseconds) |
+
+| `Album` field | Notes |
+|---|---|
+| `id` | Opaque (Android bucket / iOS collection / Linux dir name) |
+| `name`, `count`, `type` | Display name, item count, classified `MediaType` |
+| `thumbnailMediaId` | Newest item in the album |
+| `path` | Linux only (album directory) |
+| `lastModified` | Newest item's added date |
+
+### Errors
+
+Failures throw typed exceptions (all `PhotoGalleryException` subclasses):
+
+| Exception | Native code | Meaning |
+|---|---|---|
+| `PermissionDeniedException` | `PERMISSION_ERROR` | No gallery access |
+| `NotFoundException` | `NOT_FOUND` | Album/media vanished |
+| `UnsupportedMediaTypeException` | `INVALID_TYPE` | Bad type argument |
+| `ThumbnailException` | `THUMBNAIL_ERROR` | Thumbnail generation failed |
+| `PlatformGalleryException` | other | Platform-specific failures |
+
+## Caching thumbnails
 
 ```dart
-import 'package:photo_gallery_pro/photo_gallery_pro.dart';
-
-// Initialize the plugin
-final photoGallery = PhotoGalleryPro();
-
-// Request permissions if needed (not required on Linux)
-if (!await photoGallery.hasPermission()) {
-  final granted = await photoGallery.requestPermission();
-  if (!granted) return;
-}
-```
-
-### Working with Albums
-
-```dart
-// Get all albums
-final albums = await photoGallery.getAlbums();
-
-// Or get only image albums
-final imageAlbums = await photoGallery.getAlbums(type: MediaType.image);
-
-// Or get only video albums
-final videoAlbums = await photoGallery.getAlbums(type: MediaType.video);
-
-// Get album thumbnail
-final albumThumbnail = await photoGallery.getAlbumThumbnail(
-  albums[0].id,
-  type: albums[0].type,
+final cache = ThumbnailCache(maxEntries: 500, maxBytes: 20 << 20);
+final thumb = await cache.getOrLoad(
+  media.id,
+  () => gallery.getThumbnail(media.id, size: const ThumbnailSize.square(256)),
 );
 ```
 
-### Working with Media
+## Migrating from 0.0.x
 
-```dart
-// Get media in an album
-final mediaList = await photoGallery.getMediaInAlbum(
-  albums[0].id,
-  type: albums[0].type,
-);
-
-// Get thumbnail for a specific media item
-final thumbnail = await photoGallery.getThumbnail(
-  mediaList[0].id,
-  type: mediaList[0].type,
-);
-```
-
-### Understanding the Models
-
-#### Album Model
-
-The `Album` model represents a collection of media items on the device:
-
-```dart
-final Album album = albums[0];
-
-print(album.id);        // Unique identifier for the album
-print(album.name);      // Display name (e.g., "Camera", "Screenshots")
-print(album.count);     // Number of media items in the album
-print(album.type);      // MediaType.image, MediaType.video, or MediaType.mixed
-```
-
-#### Media Model
-
-The `Media` model contains information about individual photos or videos:
-
-```dart
-final Media media = mediaList[0];
-
-print(media.id);        // Unique identifier for the media item
-print(media.filename);  // Original file name with extension
-print(media.type);      // MediaType.image or MediaType.video
-print(media.path);      // Path to the media file on the device
-print(media.created);   // DateTime when the media was created
-print(media.width);     // Original width in pixels
-print(media.height);    // Original height in pixels
-print(media.mimeType);  // MIME type (e.g., "image/jpeg", "video/mp4")
-print(media.duration);  // Duration for videos (null for images)
-```
-
-#### Thumbnail Model
-
-The `Thumbnail` model provides access to the preview image data:
-
-```dart
-final Thumbnail thumb = await photoGallery.getThumbnail(media.id);
-
-print(thumb.width);     // Width of the thumbnail in pixels
-print(thumb.height);    // Height of the thumbnail in pixels
-print(thumb.bytes);     // Raw bytes of the thumbnail image (Uint8List)
-
-// Example: Display thumbnail in an Image widget
-Image.memory(thumb.bytes)
-```
-
-## Platform Specific Notes
-
-### Linux
-
-- No explicit permissions are required
-- Uses the standard Pictures directory for media access
-- Supports common image formats (JPG, PNG) and video formats (MP4, AVI, MKV)
-- Thumbnails are generated using GDK-Pixbuf
+See [MIGRATION.md](MIGRATION.md). In short: `requestPermission()` now
+returns `PermissionStatus`, `Media.path` is deprecated in favor of
+`uri`/`filePath`, `getMediaInAlbum` defaults to `MediaType.mixed`, and
+thumbnails return a canonical map on every platform.
 
 ## Example
 
-Check the [example](example) directory for a complete sample app demonstrating all features.
+See [example/](example/) for a full demo (filter chips, pull-to-refresh,
+limited-access banner, media detail viewer).
 
-## Contributing
+## Contributing & Security
 
-Feel free to contribute to this project by:
-
-- [Opening issues](https://github.com/binkapS/photo_gallery_pro/issues)
-- Submitting pull requests
-- Adding documentation
-- Reporting bugs
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development workflow and gates
+- [SECURITY.md](SECURITY.md) — how to report vulnerabilities privately
+- The method-channel contract lives in `plan.md` Appendix B.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).

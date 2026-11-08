@@ -1,6 +1,6 @@
 name: photo_gallery_pro
 description: "A Flutter plugin for accessing photos and videos from the device gallery. Supports Android, iOS, and Linux with a typed Dart API."
-version: 0.2.0
+version: 1.0.0
 homepage: https://binkap.com/packages/photo_gallery_pro
 repository: https://github.com/binkapS/photo_gallery_pro
 issue_tracker: https://github.com/binkapS/photo_gallery_pro/issues
